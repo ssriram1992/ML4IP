@@ -37,10 +37,10 @@ class MIP:
             self.beq = np.genfromtxt(beq, delimiter=delimiter)
             self.cont = np.genfromtxt(cont, delimiter=delimiter)
         else:
-            self.f = f
-            self.Aeq = Aeq
-            self.beq = beq
-            self.cont = cont
+            self.f = f.copy()
+            self.Aeq = Aeq.copy()
+            self.beq = beq.copy()
+            self.cont = cont.copy()
     def __init__(self, f, A, b, Aeq, beq, lb, ub, cont, filenames = False, delimiter = ','):
         """
         Can enter f, A, b, Aeq, beq, lb, ub, cont either as matrices of appropriate size (filenames = 0)
@@ -99,8 +99,8 @@ class MIP:
                 # i.e., rewriting x = x1 + x2 with x1 >=0 ,x2 >= 0
                 f2 = np.vstack((f2, [[-f2[i,0]]])) #Corresponding "-c_i" for new term in obj
                 cont2 = np.vstack((cont2, [[cont2[i,0]]])) 
-                t1 = A.shape[0] # Number of inequality constraints
-                t2 = Aeq.shape[0] # Number of equality constraints
+                t1 = A2.shape[0] # Number of inequality constraints
+                t2 = Aeq2.shape[0] # Number of equality constraints
                 t3 = Aub.shape[0] # Number of upperbound constraints
                 t4 = Alb.shape[0] # Number of lowerbound constraints
                 # Adding a column to constraint matrices with sign flipped, for the new variable
@@ -121,7 +121,7 @@ class MIP:
                     # added
                     Alb[lb_count, i] = -1
                     Alb[lb_count, np.size(f2)-1] = 1 #last variable so far
-                    blb[lb_count, 0] = lb[i,0]
+                    blb[lb_count, 0] = lb2[i,0]
                     lb_count = lb_count+1
             else:
                 if lb2[i,0] > 0:
