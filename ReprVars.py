@@ -45,8 +45,8 @@ class MIP:
         """
         Can enter f, A, b, Aeq, beq, lb, ub, cont either as matrices of appropriate size (filenames = 0)
         Or as names to csv files, from which the data can be fetched. (filenames = 1)
-        This can be used to convert problems in the form 
-            min c^T x subject to 
+        This can be used to convert problems in the form
+            min c^T x subject to
             A x <= b
             Aeq x = beq
             lb <= x <= ub
@@ -83,7 +83,7 @@ class MIP:
         # LB constraints come, only if lb is neither 0 nor -Infinity
         Alb = np.zeros((temp,nvar))
         bub = np.zeros((np.sum(ub2<np.inf),1))
-        blb = np.zeros((temp,1))        
+        blb = np.zeros((temp,1))
         for i in np.arange(nvar):
             # Converting bound constraints to <= constraints
             # Ensure all variables satisfy >= 0
@@ -98,7 +98,7 @@ class MIP:
                 # other entities have to be changed.
                 # i.e., rewriting x = x1 + x2 with x1 >=0 ,x2 >= 0
                 f2 = np.vstack((f2, [[-f2[i,0]]])) #Corresponding "-c_i" for new term in obj
-                cont2 = np.vstack((cont2, [[cont2[i,0]]])) 
+                cont2 = np.vstack((cont2, [[cont2[i,0]]]))
                 t1 = A2.shape[0] # Number of inequality constraints
                 t2 = Aeq2.shape[0] # Number of equality constraints
                 t3 = Aub.shape[0] # Number of upperbound constraints
@@ -117,7 +117,7 @@ class MIP:
                             -Alb[:,i].reshape(t4,1)
                             ))
                 if lb2[i,0]>-np.inf:
-                    # However if lower bound is not -Inf (i.e., finite), then that constraint is 
+                    # However if lower bound is not -Inf (i.e., finite), then that constraint is
                     # added
                     Alb[lb_count, i] = -1
                     Alb[lb_count, np.size(f2)-1] = 1 #last variable so far
@@ -166,17 +166,17 @@ class MIP:
             return {'nVar':nVar, 'nCons':nCons, 'nInt':nInt}
     def createTableaux():
         """
-        Function, that uses the 
+        Function, that uses the
         information in f, Aeq, beq and solves the LP relaxation of the problem.
         The function should return LP solution vector, LP objective value,
-        and the set of optimal Basic Variables/Non-basic variables (so that we 
-        can calculate the tableaux externally). Optionally, the tableaux can be 
+        and the set of optimal Basic Variables/Non-basic variables (so that we
+        can calculate the tableaux externally). Optionally, the tableaux can be
         directly returned from this function.
         """
-        pass # TODO 
+        pass # TODO
     def drawVarConstGraph(self, forTableaux = 0):
         """
-        Draws the variable constraint Graph either for the original problem. 
+        Draws the variable constraint Graph either for the original problem.
         Or for the simplex tableaux
         """
         if forTableaux:
