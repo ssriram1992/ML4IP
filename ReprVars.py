@@ -121,13 +121,13 @@ class MIP:
                     # added
                     Alb[lb_count, i] = -1
                     Alb[lb_count, np.size(f2)-1] = 1 #last variable so far
-                    blb[lb_count, 0] = lb2[i,0]
+                    blb[lb_count, 0] = -lb2[i,0]
                     lb_count = lb_count+1
             else:
                 if lb2[i,0] > 0:
                     # If lower bound is greater than 0, constraint has to be added
                     Alb[lb_count,i] = -1
-                    blb[lb_count, 0] = lb2[i,0]
+                    blb[lb_count, 0] = -lb2[i,0]
                     lb_count = lb_count+1
         # Count the number of constraints
         nineq = np.size(b2) # Number of straight forward inequalities
@@ -160,10 +160,10 @@ class MIP:
         Returns the number of variables, number of constraints and number of integer
         variables in the IP
         """
-            nVar = np.size(self.f)
-            nCons = np.size(self.beq)
-            nInt = nVar - np.sum(self.cont)
-            return {'nVar':nVar, 'nCons':nCons, 'nInt':nInt}
+        nVar = np.size(self.f)
+        nCons = np.size(self.beq)
+        nInt = nVar - np.sum(self.cont)
+        return {'nVar':nVar, 'nCons':nCons, 'nInt':nInt}
     def createTableaux():
         """
         Function, that uses the
