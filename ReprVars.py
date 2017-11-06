@@ -168,9 +168,7 @@ class MIP:
         """
         Returns the number of entries greater than a threshold in f, Aeq, and beq
         """
-        count_f = 0
-        count_Aeq = 0
-        count_beq = 0
+        count_f = count_Aeq = count_beq = 0
         epsilon = 0 #threshold
         
         #count "positive" entries in f
