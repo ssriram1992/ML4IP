@@ -16,7 +16,7 @@ class MIP:
         """
         Empty initialization
         """
-        self.f = numpy.array([[]]).reshape((0,1)) # Minimization objjective
+        self.f = numpy.array([[]]).reshape((0,1)) # Minimization objective
         self.Aeq = numpy.array([[]]).reshape((0,0)) # Equality constraint matrix
         self.beq = numpy.array([[]]).reshape((0,1)) # Equality constraint RHS
         self.cont = numpy.array([])               # 1/0 vector indicating if variable is continuous
@@ -164,6 +164,31 @@ class MIP:
         nCons = np.size(self.beq)
         nInt = nVar - np.sum(self.cont)
         return {'nVar':nVar, 'nCons':nCons, 'nInt':nInt}
+    def pos_entries(self):
+        """
+        Returns the number of entries greater than a threshold in f, Aeq, and beq
+        """
+        count_f = 0
+        count_Aeq = 0
+        count_beq = 0
+        epsilon = 0 #threshold
+        
+        #count "positive" entries in f
+        for i in f:
+            if i >= epsilon:
+                count_f += 1
+        
+        #count "positive" entries in beq
+        for i in beq:
+            if i >= epsilon:
+                count_beq += 1
+        
+        #count "positive" entries in Aeq
+        for row in Aeq:
+            for i in row:
+                if i >= epsilon:
+                    count_Aeq += 1
+        return {'nPosEntriesF': count_f, 'nPosEntriesAeq': count_Aeq, 'nPosEntriesBeq': count_Beq}
     def createTableaux():
         """
         Function, that uses the
