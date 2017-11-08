@@ -1,6 +1,6 @@
 import numpy as np
 import scipy as sp
-
+from scipy.optimize import linprog
 
 # Making changes in Sri branch
 class MIP:
@@ -187,6 +187,13 @@ class MIP:
                 if i >= epsilon:
                     count_Aeq += 1
         return {'nPosEntriesF': count_f, 'nPosEntriesAeq': count_Aeq, 'nPosEntriesBeq': count_Beq}
+    def simplexSolver(self):
+        negAeq = [-x for x in self.Aeq]
+        negbeq = [-x for x in self.beq]
+        A = [self.Aeq, negAeq]
+        b = [self.beq, negbeq]
+        res = linprog(self.f, A, b)
+       
     def createTableaux():
         """
         Function, that uses the
