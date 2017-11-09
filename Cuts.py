@@ -96,6 +96,91 @@ def GMI(N, b, rows, cont_NB):
     A_GMI = A_GMI[find_rows,:]
     return (A_GMI, b_GMI)
 
+def intRows(x_B, int_B, epsilon = 1e-12):
+    """
+    INPUT
+    x_B:     Current basic solution
+    int_B:   0/1 vector, same shape as x_B, indicating which of them should be 
+    epsilon: tolerance for considering a number as integer
+    OUTPUT
+    badrows: returns 0/1 vector indicating the set of basics 
+            that should have been integers but not integers. 
+    """
+    t1 = np.remainder(x_B, 1)>=epsilon  # Is it epsilon farther from an integer?
+    t2 = int_B # is it expected to be an integer?
+    return np.logical_and(t1, t2) # Satisfies both the above conditions?
+
+def Rows4Xcut(x_B, nRows, nCuts, intVar, n_badrow):
+    """
+    INPUTS:
+    x_B = current basic solution. This also tells how many rows are available to pick from
+    nRows = Number of rows to pick
+    nCuts = Number of cuts to be added.
+    intVar = 1/0 vector with same size as x_B saying which of the rows should be
+    integers. Picking is done only from these rows.
+    n_badrow = Minimum number of badrows to be selected for each cut. 
+            (nRows - n_badrow) will be chosen from goodrows
+            (badrow = should be integer, but LP relaxation gave non-integer)
+            (goodrow = should be integer, but LP relaxation gave integer row)
+    OUTPUTS:
+    All outputs are nRows x nCuts sparse matrices
+    ans["RowMat"] : 0/1 matrix indicating which row to pick for which cut
+    ans["muMat"] : elements in [0,1) giving mu values for each cut. mu sums to 1 along rows
+    ans["fMat"] : elements in [0,1) giving f values for each cut.
+    """
+    nCons = x_B.shape[0] # Number of constraint rows to pick from 
+    badrow = intRows(x_B, intVar)
+    goodrow = np.logical_and(
+        np.logical_not(badrow), 
+        intVar
+        )
+    # Note that badrow union goodrow = intVar
+    if np.sum(intVar) < nRows: # Number of integer rows < number of rows to pick?
+        print("Too few rows to pick from") # Too bad! Can't do that!
+        return 
+    if np.sum(badrow) < n_badrow: # If LP solution has only 1 bad row, and you are trying to pick 2 bad rows?
+        print ("Too few bad rows")  # Too bad! Can't do that!
+        return
+    if np.sum(goodrow) < (nRows-n_badrow): # If there are too few goodrows
+        n_badrow = nRows - np.sum(goodrow) # We have to pick more badrows in the cuts. 
+    # Finding indices of the 0/1 vectors
+    good = np.where(goodrow)[0]
+    bad = np.where(badrow)[0]
+    ints = np.where(intVar)[0]
+    # Since we will construct sparse matrices, generating row and column indices
+    # Note, we are dealing with objects of class scipy.sparse.csc_matrix 
+    # Documentation in https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.csc_matrix.html#scipy.sparse.csc_matrix
+    # This form of sparse matrix is fastest for column splicing which is what we need
+    t_RowInd = np.zeros((nRows*nCuts,))
+    t_ColInd = np.zeros((nRows*nCuts,))
+    muVals = np.zeros((nRows*nCuts,))
+    fVals = np.zeros((nRows*nCuts,))
+    # Generating values for each cut
+    for i in np.arange(nCuts):
+        t2 = np.random.permutation(bad)[0:n_badrow] # Pick n_badrow numbers of badrow in random
+        t3 = np.random.permutation(good)[0:(nRows-n_badrow)] # Pick remaining goodrows
+        t1 = np.concatenate((t2,t3))
+        t1.sort() # Just to be clean
+        t_RowInd[ (i*nRows)+np.arange(nRows) ] = t1 # picks rows in t1
+        t_ColInd[ (i*nRows)+np.arange(nRows) ] = i # for i-th cut
+        # Selectitng mu
+        muChoice = np.random.rand(nRows, )
+        muChoice = muChoice/np.sum(muChoice) # normalizing mu to sum to 1
+        muVals[ (i*nRows)+np.arange(nRows) ] = muChoice
+        # selecting f
+        fChoice = np.random.rand(nRows, )
+        fVals[ (i*nRows)+np.arange(nRows) ] = fChoice
+    # Actually creating the sparse matrices now
+    RowMat = sp.sparse.csc_matrix((np.ones(t_RowInd.shape),(t_RowInd, t_ColInd)),shape = (nCons, nCuts))
+    muMat = sp.sparse.csc_matrix((muVals, (t_RowInd, t_ColInd)),shape = (nCons, nCuts))
+    fMat = sp.sparse.csc_matrix((fVals, (t_RowInd, t_ColInd)),shape = (nCons, nCuts))
+    ans = dict()
+    ans["RowMat"] = RowMat
+    ans["muMat"] = muMat
+    ans["fMat"] = fMat
+    return ans
+
+
 
         
 
