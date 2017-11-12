@@ -42,7 +42,10 @@ def addCuts(inMIP N_in, cutA, cutb):
     contnew = np.zeros(fnew.shape)
     contnew[0:nVars,0] = cont # same integrality constraints as in older problem, all slacks assumed to be continuous
     # Creating the class
-    outMIP = MIP(f, Aeq, beq, cont, filenames = False)
+    outMIP = MIP( form = 1, # Standard form
+        data = {'f' : f, 'Aeq' : Aeq, 'beq' : beq, 'cont' : cont}, # MIP Data
+        filenames = False # Defining from actual variables
+        )
     return outMIP
 
 
