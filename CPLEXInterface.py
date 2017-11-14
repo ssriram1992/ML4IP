@@ -54,26 +54,38 @@ def getfromCPLEX(M, solution = True,    objective = True,   tableaux = True, bas
     basic       when true returns the indices of basic variables in the optimal basis
     precission  number of decimal points to use in the simplex Tableaux
     """
+    # First let us turn on all presolve procedures and run 
+    # Straightforward Simplex on the primal problem 
+    # For an exact description of each of these, check
+    # https://www.ibm.com/support/knowledgecenter/SSSA5P_12.6.3/ilog.odms.studio.help/pdf/paramcplex.pdf
     M.parameters.lpmethod.set(M.parameters.lpmethod.values.primal)  # Solve the primal problem
+    M.parameters.preprocessing.presolve.set(0)
+    M.parameters.preprocessing.numpass.set(0)                 # Don't pass it to "other" presolves
+    M.parameters.preprocessing.fill.set(0)                    # Don't aggregate variables
+    M.parameters.preprocessing.linear.set(0)                  # Turn off linear reductions
+    M.parameters.preprocessing.aggregator.set(0)              # Don't use aggregator
+    M.parameters.preprocessing.reduce.set(0)                  # Don't use primal/dual reduction
     M.presolve.presolve(M.presolve.method.none)                     # Turn off any presolving
+    M.set_log_stream(None)                                          # Don't print log on screen
+    M.set_results_stream(None)                                      # Don't print progress on screen
     if M.solution.get_status()==0: # If the model is not already solved
         M.solve()                  # then solve it now
     Sol = dict()    
     # Objective
     if objective: # adding the objective
-        Sol["objective"] = M.solution.get_objective_value()
+        Sol["Objective"] = M.solution.get_objective_value()
     if tableaux or basic or solution:
         # Solution
         tsol = np.array(M.solution.get_values()) # Getting the value from CPLEX and converting to np.array
         tsol = np.around(tsol, precission).reshape((np.size(tsol),1)) # rounding it off to appropriate precission and 
         if solution: # adding the solution      
-            Sol["solution"] = tsol
+            Sol["Solution"] = tsol
         if tableaux or basic:
             # Tableaux
             tTabl = np.array(M.solution.advanced.binvarow())
             tTabl = np.around(tTabl, precission)        
             if tableaux:
-                Sol["tableaux"] = tTabl
+                Sol["Tableaux"] = tTabl
             # Basic variables
             if basic:
                 # Finding the set of basic variables from the simplex tableaux
