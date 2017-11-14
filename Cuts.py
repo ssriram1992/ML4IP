@@ -1,11 +1,13 @@
 import numpy as np
 import scipy as sp
+import scipy.sparse
+from ReprVars import *
 
 
 
 # No class, writing functions 
 
-def addCuts(inMIP N_in, cutA, cutb):
+def addCuts(inMIP, N_in, cutA, cutb):
     """
     outMIP =  addCuts(inMIP, N_in, cutA, cutb)
     INPUT:
@@ -27,7 +29,7 @@ def addCuts(inMIP N_in, cutA, cutb):
     cont = inMIP.cont
     # The new objective function. objective 0s for the slacks
     fnew = np.zeros((nVars+nCuts,1)) 
-    fnew[np.arange(nVars),0] = f
+    fnew[np.arange(nVars),0] = f.reshape((nVars, ))
     # New Aeq matrix
     # Number of constraints and variables both increase by nCuts
     Anew = np.zeros((nCons+nCuts, nVars+nCuts))
@@ -36,14 +38,14 @@ def addCuts(inMIP N_in, cutA, cutb):
     Anew[nCons:,nVars:] = np.identity(nCuts) #Identity corresponding to slacks
     # b
     bnew = np.zeros((nCons+nCuts,1))
-    bnew[0:nCons,0] = b;
-    bnew[nCons:,0] = -cutb
+    bnew[0:nCons,0] = b.reshape(nCons,);
+    bnew[nCons:,0] = -cutb.reshape(nCuts, )
     # continuous or integer?
     contnew = np.zeros(fnew.shape)
-    contnew[0:nVars,0] = cont # same integrality constraints as in older problem, all slacks assumed to be continuous
+    contnew[0:nVars,0] = cont.reshape(nVars,) # same integrality constraints as in older problem, all slacks assumed to be continuous
     # Creating the class
     outMIP = MIP( form = 1, # Standard form
-        data = {'f' : f, 'Aeq' : Aeq, 'beq' : beq, 'cont' : cont}, # MIP Data
+        data = {'f' : fnew, 'Aeq' : Anew, 'beq' : bnew, 'cont' : contnew}, # MIP Data
         filenames = False # Defining from actual variables
         )
     return outMIP
@@ -174,7 +176,7 @@ def Rows4Xcut(x_B, nRows, nCuts, intVar, n_badrow):
         fChoice = np.random.rand(nRows, )
         fVals[ (i*nRows)+np.arange(nRows) ] = fChoice
     # Actually creating the sparse matrices now
-    RowMat = sp.sparse.csc_matrix((np.ones(t_RowInd.shape),(t_RowInd, t_ColInd)),shape = (nCons, nCuts))
+    RowMat = sp.sparse.csc_matrix((np.ones(t_RowInd.shape),(t_RowInd, t_ColInd)),shape = (nCons, nCuts), dtype=np.int8)
     muMat = sp.sparse.csc_matrix((muVals, (t_RowInd, t_ColInd)),shape = (nCons, nCuts))
     fMat = sp.sparse.csc_matrix((fVals, (t_RowInd, t_ColInd)),shape = (nCons, nCuts))
     ans = dict()
@@ -202,9 +204,9 @@ def XGauge(mu, b, x):
     # dimension we are in
     n = mu.shape[0]
     # reshaping to nx1 vectors as opposed to pythons (n,) shaped tuple, just in case
-    mu = mu.reshape((n,1))
-    b = b.reshape((n,1))
-    x = x.reshape((n,1))
+    mu = mu.copy().reshape((n,1))
+    b = b.copy().reshape((n,1))
+    x = x.copy().reshape((n,1))
     a = np.zeros((n,1))
     for i in np.arange(n):
         if x[i] >= 0:
@@ -220,7 +222,7 @@ def XGauge(mu, b, x):
 
 def XLift(N, b, RowMat, muMat, cont_NB):
     """
-    (A_Xcut, b_Xcut) = GXLift(N, b, RowMat, muMat, fMat, cont_NB)
+    (A_Xcut, b_Xcut) = XLift(N, b, RowMat, muMat, cont_NB)
     INPUTS:
     N       Nonbasic matrix
     b       LP solution
@@ -238,10 +240,11 @@ def XLift(N, b, RowMat, muMat, cont_NB):
     # One iteration of this loop for each cut
     for cut in np.arange(nCuts):
         # Get the rows of the non-basic used in this cut
-        rows = RowMat[:, cut].astype(bool)
-        # Bring "b" into the unit hypercube [0,1]^n
+        rows = RowMat[:, cut].copy().astype(bool).todense()
+        rows = rows.A.squeeze()        
+        # Bring "b" into the unit hypercube [0,1]^n        
         bb = b[rows,0] - np.floor(b[rows,0])
-        mu = muMat[rows, cut]
+        mu = muMat[rows, cut].copy().todense().A
         # reshaping them into nx1 vectors
         mu = mu.reshape((mu.shape[0],1))
         bb = bb.reshape((bb.shape[0],1))
@@ -263,7 +266,7 @@ def XLift(N, b, RowMat, muMat, cont_NB):
                 primshift = (xfrac > bb)*1 # Is x outside [b-1, b]^n hypercube?
                 xmid = xfrac - primshift # Bring x into [b-1, b]^n hypercube
                 lifting = 1 # Initialization
-                # Calculating the best gauge in each drection
+                # Calculating the best gauge in each direction
                 for direction in np.arange(n):
                     # Solving a 1d convex IP in each dimension
                     shift = np.zeros((n,1))
@@ -272,12 +275,9 @@ def XLift(N, b, RowMat, muMat, cont_NB):
                     ub = np.floor((bb[direction, 0])/mu[direction, 0])
                     while True:
                         mid = np.round((lb+ub)/2.0,0)
-                        t0 = XGauge(mu, b, xmid+mid*shift)
+                        t0 = XGauge(mu, bb, xmid+mid*shift)                        
                         t1 = t0["gauge"]
                         t2 = t0["normal"]
-                        ### temp = a_Actual.dot(xmid+mid*shift) # scalar product with all normals
-                        ### t2 = np.argmax(temp) # which'th normal achieves the gauge
-                        ### t1 = temp[t2]        # the gauge
                         if t2[direction, 0] < 0:
                             lb = mid
                         else:
@@ -288,13 +288,14 @@ def XLift(N, b, RowMat, muMat, cont_NB):
                         lifting = np.minimum(lifting, t1)
                     else:
                         lifting = np.min([lifting, 
-                            XGauge(mu, b, xmid+lb*shift)["gauge"],
-                            XGauge(mu, b, xmid+ub*shift)["gauge"]])
+                            XGauge(mu, bb, xmid+lb*shift)["gauge"],
+                            XGauge(mu, bb, xmid+ub*shift)["gauge"]]
+                            )
                     # End of direction for loop
                 A_Xcut[cut, var] = lifting
                 # End of else for lifting of integer variable
             # End of var for loop
-        print('cut ' + str(cut) + 'generated' )
+        print('cut ' + str(cut+1) + ' generated' )
         # End of cut for loop
     return (A_Xcut, b_Xcut)
     # End of lifting function
@@ -332,7 +333,7 @@ def GXLift(N, b, RowMat, muMat, fMat, cont_NB):
     (A_GXcut, b_GXcut) = GXLift(N, b, RowMat, muMat, fMat, cont_NB)
     INPUTS:
     N       Nonbasic matrix
-    b       LP solution
+    b       LP solution (basic)
     muMat   A Nrow x Ncut matrix with each column being a mu vector for a cut. Sum across rows should be 1
     fMat    A Nrow x Ncut matrix with each columb being the location of center for a cut
     cont_NB says which of the non-basics are continuous to generate appropriate cut-coefficients
@@ -348,14 +349,16 @@ def GXLift(N, b, RowMat, muMat, fMat, cont_NB):
     # One iteration of this loop for each cut
     for cut in np.arange(nCuts):
         # Get the rows of the non-basic used in this cut
-        rows = RowMat[:, cut].astype(bool)
+        rows = RowMat[:, cut].copy().astype(bool).todense()
+        rows = rows.A.squeeze()             
         # Bring "b" into the unit hypercube [0,1]^n
         bb = b[rows,0] - np.floor(b[rows,0])
         # Ensure that the origin and the center of the GX-polytope are in the same hypercube
-        f = fMat[rows, cut] - np.ceil(fMat[rows, cut]-bb)
-        mu = muMat[rows, cut]
+        f = fMat[rows, cut]
+        f = f - np.ceil(f-bb.reshape(f.shape))
+        mu = muMat[rows, cut].copy().todense().A
         # reshaping them into nx1 vectors
-        mu = mu.reshape((mu.shape[0],1))
+        mu = mu.reshape((mu.shape[0],1))        
         f = f.reshape((f.shape[0],1))
         bb = bb.reshape((bb.shape[0],1))
         # Using the function defined before to get the facets of the cross polytope

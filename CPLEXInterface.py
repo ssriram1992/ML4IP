@@ -1,4 +1,6 @@
 import cplex
+import numpy as np
+import scipy as sp
 
 def Py2Cplex(Prob):
     """
@@ -11,7 +13,7 @@ def Py2Cplex(Prob):
     """
     M = cplex.Cplex()
     M.objective.set_sense(M.objective.sense.minimize)
-    # Note integer/continuos detail is not ed as CPLEX will solve this as
+    # Note integer/continuos detail is not added as CPLEX will solve this as
     # LP and not MIP.
     # Note, CPLEX has default lb = 0, and ub = +Inf. So we are not explicitly
     # setting the bounds.
@@ -20,9 +22,10 @@ def Py2Cplex(Prob):
     nCons = np.size(Prob.beq)   
     nVar = np.size(Prob.f)
     # Writing the LHS list
-    LHS =  [[range(nVar), Afin[i,:].squeeze().tolist()] for i in range(nCons)]
+    LHS =  [[range(nVar), Prob.Aeq[i,:].squeeze().tolist()] for i in range(nCons)]
     # Adding the constraints
     M.linear_constraints.add(lin_expr = LHS, senses='E'*nCons, rhs=Prob.beq.squeeze().tolist())
+    return M
     
 
 def Cplex2Py(M, MIPobj = False):
