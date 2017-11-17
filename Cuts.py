@@ -2,6 +2,7 @@ import numpy as np
 import scipy as sp
 import scipy.sparse
 from ReprVars import *
+import cplex
 
 
 
@@ -53,6 +54,19 @@ def addCuts(inMIP, N_in, cutA, cutb):
 
 
 
+def addCuts2Cplex(filename, NB, A_cut, b_cut):
+    C = cplex.Cplex()
+    C.read(filename)
+    A_cut = A_cut.tolist()
+    b_cut = b_cut.squeeze().tolist()
+    NB = NB.tolist()
+    for i in range(len(b_cut)):
+        C.linear_constraints.add(
+            lin_expr=[cplex.SparsePair(ind=NB, val = A_cut[i])], 
+            senses= "G", 
+            rhs = [b_cut[i]]
+            )
+    return C
 
 
 
@@ -111,8 +125,8 @@ def intRows(x_B, int_B, epsilon = 1e-12):
     badrows: returns 0/1 vector indicating the set of basics 
             that should have been integers but not integers. 
     """
-    t1 = np.remainder(x_B, 1)>=epsilon  # Is it epsilon farther from an integer?
-    t2 = int_B # is it expected to be an integer?
+    t1 = np.remainder(x_B.squeeze(), 1)>=epsilon  # Is it epsilon farther from an integer?
+    t2 = int_B.squeeze() # is it expected to be an integer?
     return np.logical_and(t1, t2) # Satisfies both the above conditions?
 
 def Rows4Xcut(x_B, nRows, nCuts, intVar, n_badrow):
@@ -376,34 +390,49 @@ def GXLift(N, b, RowMat, muMat, fMat, cont_NB):
                 # "else the lifting" part
                 n = np.shape(mu)[0]     # Dimensionality of the crosspolytope
                 xfrac = x - np.floor(x) # Bringing x into [0,1]^n hyper cube
-                primshift = (xfrac > bb)*1 # Is x outside [b-1, b]^n hypercube?
-                xmid = xfrac - primshift # Bring x into [b-1, b]^n hypercube
-                lifting = 1 # Initialization
-                # Calculating the best gauge in each drection
-                for direction in np.arange(n):
-                    # Solving a 1d convex IP in each dimension
-                    shift = np.zeros((n,1))
-                    shift[direction,0] = 1 # shift is a coordinate unit vector now
-                    lb = np.ceil((bb[direction, 0]-1)/mu[direction, 0])
-                    ub = np.floor((bb[direction, 0])/mu[direction, 0])
-                    while True:
-                        mid = np.round((lb+ub)/2.0,0)
-                        temp = a_Actual.dot(xmid+mid*shift) # scalar product with all normals
-                        t2 = np.argmax(temp) # which'th normal achieves the gauge
-                        t1 = temp[t2]        # the gauge
-                        if a_Actual[t2, direction] < 0:
-                            lb = mid
-                        else:
-                            ub = mid
-                        if ub-lb <= 1:
+                if np.linalg.norm(xfrac):
+                    primshift = (xfrac > bb)*1 # Is x outside [b-1, b]^n hypercube?
+                    xmid = xfrac - primshift # Bring x into [b-1, b]^n hypercube
+                    lifting = 1 # Initialization
+                    print({
+                        'xfrac':xfrac,
+                        'xmid':xmid,
+                        'bb': bb
+                        })
+                    # Calculating the best gauge in each drection
+                    for direction in np.arange(n):
+                        # Solving a 1d convex IP in each dimension
+                        if lifting == 0: # Cannot do better
+                            print('Broken')
                             break
-                    if lb == ub:
-                        lifting = np.minimum(lifting, t1)
-                    else:
-                        lifting = np.min([lifting, 
-                            np.max(a_Actual.dot(xmid+lb*shift)),
-                            np.max(a_Actual.dot(xmid+ub*shift)) ])
-                    # End of direction for loop
+                        shift = np.zeros((n,1))
+                        shift[direction,0] = 1 # shift is a coordinate unit vector now
+                        lb = np.ceil((bb[direction, 0]-1)/mu[direction, 0])
+                        ub = np.floor((bb[direction, 0])/mu[direction, 0])
+                        print(lb, ub, lifting)
+                        while True:
+                            mid = np.round((lb+ub)/2.0,0)
+                            temp = a_Actual.dot(xmid+mid*shift) # scalar product with all normals
+                            t2 = np.argmax(temp) # which'th normal achieves the gauge
+                            t1 = temp[t2]        # the gauge
+                            print(t1)
+                            if a_Actual[t2, direction] < 0:
+                                lb = mid
+                            else:
+                                ub = mid
+                            if ub-lb <= 1:
+                                break
+                        if lb == ub:
+                            print('Here 1', lifting, t1)
+                            lifting = np.minimum(lifting, t1)                        
+                        else:
+                            print('Here 2', lifting,  np.max(a_Actual.dot(xmid+lb*shift)),  np.max(a_Actual.dot(xmid+ub*shift)))
+                            lifting = np.min([lifting, 
+                                np.max(a_Actual.dot(xmid+lb*shift)),
+                                np.max(a_Actual.dot(xmid+ub*shift)) ])
+                        # End of direction for loop
+                else:
+                    lifting = 0
                 A_GXcut[cut, var] = lifting
                 # End of else for lifting of integer variable
             # End of var for loop
