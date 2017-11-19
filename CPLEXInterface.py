@@ -1,6 +1,8 @@
 import cplex
 import numpy as np
 import scipy as sp
+import scipy.sparse
+import scipy.sparse.linalg
 
 def Py2Cplex(Prob):
     """
@@ -232,57 +234,77 @@ def Cplex2Py(M, sparse=False):
         Aeq x = beq
         lb <= x <= ub
         x_i \in \Z if i \in intcon
-    [c, A, b, Aeq, beq, lb, ub, intcon] = Cplex2Py(M)
+    MIP = Cplex2Py(M)
 
-    If the flag MIPobj = True is given then, it returns MIP object 
+    If Sparse is set as true, returns sparse Aeq and rest as full objects. MIP object is not returned, 
+    f, Sparse_Aeq, beq, cont are returned. Note that this works only if the CPLEX object
+    is a problem in standard form. 
     """
-    # Bound constraints
-    lb = np.array(M.variables.get_lower_bounds())
-    ub = np.array(M.variables.get_upper_bounds())
-    # Objective
-    f = np.array(M.objective.get_linear())
-    # if objective is maximization, then reverse the sign of the objective
-    if M.objective.sense[M.objective.get_sense()] == 'maximize':
-        f = -f
-    # Get constraint rows as Cpelx SparseInd
-    rows = M.linear_constraints.get_rows()
-    # Details whether it is = or <= or >=
-    senses = M.linear_constraints.get_senses()
-    # Integer or continuous?
-    cont = [1 if i=='C' else 0 for i in M.variables.get_types()]
-    # Full matrix to store constraints
-    AllCons = np.zeros((0,len(f)))
-    # Converting cplex SparseInd to numpy.array()
-    for row in rows:
-        t1 = np.array(row.ind)
-        t2 = np.array(row.val)
-        t3 = np.zeros((1,len(f)))
-        t3[0,t1] =t2
-        AllCons = np.concatenate((AllCons, t3))
-    eq = [sense=='E' for sense in senses]
-    less = [sense=='L' for sense in senses]
-    great = [sense=='G' for sense in senses]
-    # Dividing them based on constraint sense (=/<=/>=)
-    Aeq = AllCons[eq,:]
-    A = np.concatenate((AllCons[less,:], - AllCons[great,:]))
-    # RHS of constraints
-    rhs = np.array(M.linear_constraints.get_rhs())
-    beq = np.array(rhs[eq])
-    b = np.array(np.concatenate((rhs[less],-rhs[great])))
-    # Returning MIP object
-    return MIP(
-        form = 2,
-        data = {
-            "f":f,
-            "Aeq":Aeq,
-            "beq":beq,
-            "cont":cont,
-            "A":A,
-            "b":b,
-            "lb":lb,
-            "ub":ub
-        }
-    )
+    if sparse: # Note that CPLEX object should be in standard form 
+        # Objective
+        f = np.array(M.objective.get_linear())
+        # Integer or continuous?
+        cont = [1 if i=='C' else 0 for i in M.variables.get_types()]
+        # Get constraint rows as Cpelx SparseInd
+        rows = M.linear_constraints.get_rows()
+        row_ind = np.zeros([]).reshape(0,)
+        col_ind = np.zeros([]).reshape(0,)
+        data = np.zeros([]).reshape(0,)
+        for i,row in zip(range(len(rows)), rows):
+            t1 = np.array(row.ind)
+            row_ind = np.zeros(t1.shape) + i
+            col_ind = np.concatenate((col_ind, t1))
+            t2 = np.array(row.val)
+            data = np.concatenate((data, t2))
+
+    else:
+        # Bound constraints
+        lb = np.array(M.variables.get_lower_bounds())
+        ub = np.array(M.variables.get_upper_bounds())
+        # Objective
+        f = np.array(M.objective.get_linear())
+        # if objective is maximization, then reverse the sign of the objective
+        if M.objective.sense[M.objective.get_sense()] == 'maximize':
+            f = -f
+        # Get constraint rows as Cpelx SparseInd
+        rows = M.linear_constraints.get_rows()
+        # Details whether it is = or <= or >=
+        senses = M.linear_constraints.get_senses()
+        # Integer or continuous?
+        cont = [1 if i=='C' else 0 for i in M.variables.get_types()]
+        # Full matrix to store constraints
+        AllCons = np.zeros((0,len(f)))
+        # Converting cplex SparseInd to numpy.array()
+        for row in rows:
+            t1 = np.array(row.ind)
+            t2 = np.array(row.val)
+            t3 = np.zeros((1,len(f)))
+            t3[0,t1] =t2
+            AllCons = np.concatenate((AllCons, t3))
+        eq = [sense=='E' for sense in senses]
+        less = [sense=='L' for sense in senses]
+        great = [sense=='G' for sense in senses]
+        # Dividing them based on constraint sense (=/<=/>=)
+        Aeq = AllCons[eq,:]
+        A = np.concatenate((AllCons[less,:], - AllCons[great,:]))
+        # RHS of constraints
+        rhs = np.array(M.linear_constraints.get_rhs())
+        beq = np.array(rhs[eq])
+        b = np.array(np.concatenate((rhs[less],-rhs[great])))
+        # Returning MIP object
+        return MIP(
+            form = 2,
+            data = {
+                "f":f,
+                "Aeq":Aeq,
+                "beq":beq,
+                "cont":cont,
+                "A":A,
+                "b":b,
+                "lb":lb,
+                "ub":ub
+            }
+        )
 
 
 def getfromCPLEX(M, solution = True,    objective = True,   tableaux = True, basic = True, precission = 13, verbose = False, ForceSolve = False):
@@ -313,7 +335,7 @@ def getfromCPLEX(M, solution = True,    objective = True,   tableaux = True, bas
     M.parameters.preprocessing.aggregator.set(0)              # Don't use aggregator
     M.parameters.preprocessing.reduce.set(0)                  # Don't use primal/dual reduction
     M.presolve.presolve(M.presolve.method.none)                     # Turn off any presolving
-    if M.solution.get_status()==0 or ForceSolve: # If the model is not already solved
+    if M.solution.get_status()==0 or ForceSolve: # If the model is not already solved or if ForceSolve is set to be true
         M.solve()                  # then solve it now
     Sol = dict()    
     # Objective
