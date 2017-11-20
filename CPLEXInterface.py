@@ -307,14 +307,22 @@ def Cplex2Py(M, sparse=False):
         )
 
 
-def getfromCPLEX(M, solution = True,    objective = True,   tableaux = True, basic = True, precission = 13, verbose = False, ForceSolve = False):
+def getfromCPLEX(M, 
+    solution = True,    
+    objective = True,   
+    tableaux = True, 
+    basic = True, 
+    TablNB = True,
+    precission = 13, verbose = False, ForceSolve = False):
     """
     Given a CPLEX model M
-        Sol = getfromCPLEX(M,  solution = True, objective = True,   tableaux = True, basic = True, precission = 13)
+        Sol = getfromCPLEX(M,  solution = True, objective = True,   tableaux = True, basic = True, TablNB = True, precission = 13)
     returns a dictionary Sol.   
     solution    when true returns the value of the solution decision variables in the dictionary Sol
     objective   when true returns the value of the objective in the dictionary Sol
     tableaux    when true returns the final simplex tableaux with BOTH basic and non-basics
+    TablNB      when true returns the non-basic tableaux calculated as B^{-1}N using scipy.sparse matrix methods. 
+                This is valid only if the cplex problem is in standard form. Otherwise returned objects are meaningless.
     basic       when true returns the indices of basic variables in the optimal basis
     precission  number of decimal points to use in the simplex Tableaux
     """
@@ -341,47 +349,56 @@ def getfromCPLEX(M, solution = True,    objective = True,   tableaux = True, bas
     # Objective
     if objective: # adding the objective
         Sol["Objective"] = M.solution.get_objective_value()
-    if tableaux or basic or solution:
+    if tableaux or basic or solution or TablNB:
         # Solution
         tsol = np.array(M.solution.get_values()) # Getting the value from CPLEX and converting to np.array
         tsol = np.around(tsol, precission).reshape((np.size(tsol),1)) # rounding it off to appropriate precission and 
         if solution: # adding the solution      
             Sol["Solution"] = tsol
-        if tableaux or basic:
-            # Tableaux
+        if tableaux or basic or TablNB:
+            # Finding the set of basic variables from the simplex tableaux
+            nVar = M.variables.get_num() # Number of variables
+            nCon = M.linear_constraints.get_num() # Number of constraints
+            # Get the set of basic variables from CPLEX
+            Basics = np.array(M.solution.basis.get_basis()[0])
+            B_in = np.where(Basics)[0]
+            N_in = np.array(list(set(range(nVar))-set(B_in))) # Non basic is 1:nVar \setminus tBasic
+        # Basic variables
+        if basic:
+            Sol["Basic"] = B_in
+            Sol["NonBasic"] = N_in
+        # Tableaux
+        if tableaux:
             tTabl = np.array(M.solution.advanced.binvarow())
             tTabl = np.around(tTabl, precission)        
-            if tableaux:
-                Sol["Tableaux"] = tTabl
-            # Basic variables
-            if basic:
-                # Finding the set of basic variables from the simplex tableaux
-                nVar = M.variables.get_num() # Number of variables
-                nCon = M.linear_constraints.get_num() # Number of constraints
-                SureBasics = np.where(tsol!=0)[0] # Non-zero variables are definitely basics
-                if np.size(SureBasics) == nCon: # Number of non-zeros equal the number of constraints. So no degeneracy
-                    tBasic = SureBasics.copy()
-                else: # There is degeneracy in optimal basis
-                    newBasicCount = nCon - np.size(SureBasics) # Number of basic variables that take the value 0
-                    ProbableBasics = np.where(tsol==0)[0] # Indices of variables that have value 0
-                    reducedBasic = tTabl[:, SureBasics] # The Basic matrix obtained from current choice of basic variables. At the end, this should be an identity matrix
-                    # Note reducedBasic is a tall matrix. We have to add columns to make it square
-                    rowsObtained = np.sum(reducedBasic, axis=1) # Have obtained "1" along these rows already in the identity matrix
-                    for i in ProbableBasics: 
-                        # In each of the variable with zero, check if the column in tTabl is 0 everywhere, except for a 1 in a place where
-                        # rowsObtained is 0
-                        temp = tTabl[:,i] # i-th column in the tableaux
-                        if ( np.size(np.where(temp==0)[0]) == nCon -1 and # column has zeros everywhere except a single coordinate
-                             np.sum(temp) == 1 and # The non-zero row in temp has the value 1
-                             np.sum(np.any((temp, rowsObtained),axis=0)) == np.sum(rowsObtained) + 1 # The "1" in temp is in a location different from the rowsObtained
-                            ): # then this column can be added to the Basic matrix
-                            SureBasics = np.concatenate((SureBasics, [i]), axis=0) # Add the current variable index to sure basics                          
-                            reducedBasic = tTabl[:, SureBasics] # Update reducedBasic
-                            rowsObtained = np.sum(reducedBasic, axis=1)  # Update rowsObtained
-                        if np.size(SureBasics) == nCon: # Number of non-zeros equal the number of constraints. So degeneracy resolved
-                            break # Just so there is no necessity to check the condition for all the remaining columns
-                    tBasic = np.sort(SureBasics.copy())
-                Sol["Basic"] = tBasic
-                tNonBasic = np.array(list(set(np.arange(nVar)) - set(tBasic))) # Non basic is 1:nVar \setminus tBasic
-                Sol["NonBasic"] = tNonBasic
+            Sol["Tableaux"] = tTabl
+        if TablNB: # Valid only if the problem is in standard form. Otherwise returns garbage.
+            # The set of constraints in the problem
+            rows = M.linear_constraints.get_rows()
+            # The RHS of the Ax = b constraints
+            b = M.linear_constraints.get_rhs()
+            # initializing row_index/colum_index/data to initialize scipy.sparse matrix
+            # Remember CPLEX returns the rows in a sparse form - (cplex.sparse form but not the scipy.sparse form )
+            # We stick to scipy.sparse as that has better library functions, documentation etc.
+            row_ind = np.array([]).reshape(0,)
+            col_ind = np.array([]).reshape(0,)
+            data = np.array([]).reshape(0,)
+            for i,row in zip(range(len(rows)), rows):
+                t1 = np.array(row.ind)
+                row_ind = np.concatenate((row_ind, np.zeros(t1.shape) + i))
+                col_ind = np.concatenate((col_ind, t1))
+                t2 = np.array(row.val)
+                data = np.concatenate((data, t2))
+            # Creating the sparse matrix
+            Aeq = sp.sparse.csc_matrix((data, (row_ind, col_ind)))
+            # Basic matrix
+            B = Aeq[:, B_in]
+            # Non basic matrix
+            N = Aeq[:, N_in]
+            # Tableau of non-basic variables is just B^{-1}N. So we are solving the linear system B*tTabl = N
+            tTablNB = sp.sparse.linalg.spsolve(B, N)
+            # The basic solution is B^{-1}b. So we are solving the linear system B*x_B = b
+            x_B = sp.sparse.linalg.spsolve(B, b)
+            Sol["Tableaux_NB"] = tTablNB
+            Sol["Sol_Basic"] = x_B
     return Sol

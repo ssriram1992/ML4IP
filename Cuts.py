@@ -342,15 +342,16 @@ def GXGaugeA(mu, f, b):
     return a_Actual
 
 
-def GXLift(N, b, RowMat, muMat, fMat, cont_NB):
+def GXLift(N, b, RowMat, muMat, fMat, cont_NB, sparse = False, verbose = False):
     """
     (A_GXcut, b_GXcut) = GXLift(N, b, RowMat, muMat, fMat, cont_NB)
     INPUTS:
     N       Nonbasic matrix
     b       LP solution (basic)
-    muMat   A Nrow x Ncut matrix with each column being a mu vector for a cut. Sum across rows should be 1
-    fMat    A Nrow x Ncut matrix with each columb being the location of center for a cut
+    muMat   A Nrow x Ncut sparse matrix with each column being a mu vector for a cut. Sum across rows should be 1
+    fMat    A Nrow x Ncut sparse matrix with each columb being the location of center for a cut
     cont_NB says which of the non-basics are continuous to generate appropriate cut-coefficients
+    sparse  If set to True, it understands N as a scipy.sparse matrix
     """
     nCuts = RowMat.shape[1] 
     nVars = N.shape[1]
@@ -360,6 +361,9 @@ def GXLift(N, b, RowMat, muMat, fMat, cont_NB):
     A_GXcut = np.zeros((nCuts, nVars))
     b_GXcut = np.ones((nCuts,1))
     cont = set(list(np.where(cont_NB)[0]))
+    # If N is sparse, convert it into csr format, that makes row splicing faster
+    if sparse:
+        N = N.tocsr()
     # One iteration of this loop for each cut
     for cut in np.arange(nCuts):
         # Get the rows of the non-basic used in this cut
@@ -376,11 +380,19 @@ def GXLift(N, b, RowMat, muMat, fMat, cont_NB):
         f = f.reshape((f.shape[0],1))
         bb = bb.reshape((bb.shape[0],1))
         # Using the function defined before to get the facets of the cross polytope
-        a_Actual = GXGaugeA(mu, f, bb)
+        a_Actual = GXGaugeA(mu, f, bb)        
+        # Making a smaller matrix just with the rows used in this cut.
+        if sparse:
+            N1 = N[rows,:].tocsc()
+        else:
+            N1 = N[rows,:]
         # For each column of non-basic, creating lifting or gauge
         for var in np.arange(nVars):
-            # Non-basic
-            x = N[rows, var]
+            # Non-basic            
+            if sparse: #If sparse, conversion to ndArray is required
+                x = N1[:,var].A
+            else:
+                x = N1[:,var]
             x = x.reshape((x.shape[0],1))
             if var in cont:
                 # If it is continuous variable column, then calculate gauge
@@ -394,28 +406,32 @@ def GXLift(N, b, RowMat, muMat, fMat, cont_NB):
                     primshift = (xfrac > bb)*1 # Is x outside [b-1, b]^n hypercube?
                     xmid = xfrac - primshift # Bring x into [b-1, b]^n hypercube
                     lifting = 1 # Initialization
-                    print({
-                        'xfrac':xfrac,
-                        'xmid':xmid,
-                        'bb': bb
-                        })
+                    if verbose:
+                        print({
+                            'xfrac':xfrac,
+                            'xmid':xmid,
+                            'bb': bb
+                            })
                     # Calculating the best gauge in each drection
                     for direction in np.arange(n):
                         # Solving a 1d convex IP in each dimension
                         if lifting == 0: # Cannot do better
-                            print('Broken')
+                            if verbose:
+                                print('Broken')
                             break
                         shift = np.zeros((n,1))
                         shift[direction,0] = 1 # shift is a coordinate unit vector now
                         lb = np.ceil((bb[direction, 0]-1)/mu[direction, 0])
                         ub = np.floor((bb[direction, 0])/mu[direction, 0])
-                        print(lb, ub, lifting)
+                        if verbose:
+                            print(lb, ub, lifting)
                         while True:
                             mid = np.round((lb+ub)/2.0,0)
                             temp = a_Actual.dot(xmid+mid*shift) # scalar product with all normals
                             t2 = np.argmax(temp) # which'th normal achieves the gauge
                             t1 = temp[t2]        # the gauge
-                            print(t1)
+                            if verbose:
+                                print(t1)
                             if a_Actual[t2, direction] < 0:
                                 lb = mid
                             else:
@@ -423,10 +439,12 @@ def GXLift(N, b, RowMat, muMat, fMat, cont_NB):
                             if ub-lb <= 1:
                                 break
                         if lb == ub:
-                            print('Here 1', lifting, t1)
+                            if verbose:
+                                print('Here 1', lifting, t1)
                             lifting = np.minimum(lifting, t1)                        
                         else:
-                            print('Here 2', lifting,  np.max(a_Actual.dot(xmid+lb*shift)),  np.max(a_Actual.dot(xmid+ub*shift)))
+                            if verbose:
+                                print('Here 2', lifting,  np.max(a_Actual.dot(xmid+lb*shift)),  np.max(a_Actual.dot(xmid+ub*shift)))
                             lifting = np.min([lifting, 
                                 np.max(a_Actual.dot(xmid+lb*shift)),
                                 np.max(a_Actual.dot(xmid+ub*shift)) ])
