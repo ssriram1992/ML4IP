@@ -191,24 +191,12 @@ class MIP:
         """
         Returns the number of entries greater than a threshold in f, Aeq, and beq
         """
-        count_f = count_Aeq = count_beq = 0
         epsilon = 0 #threshold
         
-        #count "positive" entries in f
-        for i in f:
-            if i >= epsilon:
-                count_f += 1
+        count_f = sum(f>>epsilon)
+        count_Aeq = sum(Aeq>>epsilon)
+        count_beq = sum(beq>>epsilon)
         
-        #count "positive" entries in beq
-        for i in beq:
-            if i >= epsilon:
-                count_beq += 1
-        
-        #count "positive" entries in Aeq
-        for row in Aeq:
-            for i in row:
-                if i >= epsilon:
-                    count_Aeq += 1
         return {'nPosEntriesF': count_f, 'nPosEntriesAeq': count_Aeq, 'nPosEntriesBeq': count_Beq}
     def simplexSolver(self):
         negAeq = [-x for x in self.Aeq]
