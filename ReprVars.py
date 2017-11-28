@@ -1,6 +1,6 @@
 import numpy as np
 import scipy as sp
-
+from scipy.optimize import linprog
 
 # Making changes in Sri branch
 class MIP:
@@ -21,6 +21,13 @@ class MIP:
         filenames   : Whether the values in the data dictionary are filenames or variable names. 
         delimiter   : If values are read from a csvfile, what is the delimiter character?
         """
+<<<<<<< HEAD
+=======
+        self.f = numpy.array([[]]).reshape((0,1)) # Minimization objective
+        self.Aeq = numpy.array([[]]).reshape((0,0)) # Equality constraint matrix
+        self.beq = numpy.array([[]]).reshape((0,1)) # Equality constraint RHS
+        self.cont = numpy.array([])               # 1/0 vector indicating if variable is continuous
+>>>>>>> eb1d8f2585684774bda4b0e6bb63756753653f91
         self.LPSolved = False                     # Boolean to store if LP relaxation is solved
         self.GraphDrawn = False                   # Boolean to store if the Variable Constraint Graph is drawn
         self.TableGraphDrawn = False              # Boolean to store if the Variable Constraint Graph is drawn for simplex tableaux
@@ -180,6 +187,36 @@ class MIP:
         nCons = np.size(self.beq)
         nInt = nVar - np.sum(self.cont)
         return {'nVar':nVar, 'nCons':nCons, 'nInt':nInt}
+    def pos_entries(self):
+        """
+        Returns the number of entries greater than a threshold in f, Aeq, and beq
+        """
+        count_f = count_Aeq = count_beq = 0
+        epsilon = 0 #threshold
+        
+        #count "positive" entries in f
+        for i in f:
+            if i >= epsilon:
+                count_f += 1
+        
+        #count "positive" entries in beq
+        for i in beq:
+            if i >= epsilon:
+                count_beq += 1
+        
+        #count "positive" entries in Aeq
+        for row in Aeq:
+            for i in row:
+                if i >= epsilon:
+                    count_Aeq += 1
+        return {'nPosEntriesF': count_f, 'nPosEntriesAeq': count_Aeq, 'nPosEntriesBeq': count_Beq}
+    def simplexSolver(self):
+        negAeq = [-x for x in self.Aeq]
+        negbeq = [-x for x in self.beq]
+        A = [self.Aeq, negAeq]
+        b = [self.beq, negbeq]
+        res = linprog(self.f, A, b)
+       
     def createTableaux():
         """
         Function, that uses the
