@@ -123,6 +123,8 @@ def Cplex2StdCplex(filename, MIP = False, verbose = False):
     # Extracting from "rows"
     # In each constraint row
     for i in range(len(rows)):
+        # Sign for inequality constraints. If it is an equality, then this does not matter
+        sign = 1 if senses[i]=='L' else -1
         # For each entry in the SparseInd
         for j in range(len(rows[i].ind)):
             # If it is an equality constraint
@@ -133,7 +135,6 @@ def Cplex2StdCplex(filename, MIP = False, verbose = False):
                 Aeqval.append(rows[i].val[j])
             else:
                 # Else add it to Arowind/colind/val depending on <= or >= constraint
-                sign = 1 if senses[i]=='L' else -1
                 Arowind.append(ineq)
                 Acolind.append(rows[i].ind[j])
                 Aval.append(sign*rows[i].val[j])            
@@ -219,7 +220,7 @@ def Cplex2StdCplex(filename, MIP = False, verbose = False):
     M_std.variables.add(obj = f)
     M_std.objective.set_sense(M_std.objective.sense.minimize)
     M_std.linear_constraints.add(rhs = beq+b, senses = ['E']*(ineq))
-    M_std.linear_constraints.set_coefficients(zip(Arowind+Aeqrowind, Acolind+Aeqcolind, Aval+Aeqval))
+    M_std.linear_constraints.set_coefficients(zip(Aeqrowind+Arowind, Aeqcolind+Acolind, Aeqval+Aval))
     if MIP:
         M_std.variables.set_types(zip(range(len(f)), integrality))
     return M_std
