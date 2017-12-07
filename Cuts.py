@@ -55,10 +55,10 @@ def addCuts(inMIP, N_in, cutA, cutb):
 
 
 
-def addCuts2Cplex(filename, NB, A_cut, b_cut, filenames = True, newObj = True, verbose = False):
+def addCuts2Cplex(filename, NB, A_cut, b_cut, filenames = True, newObj = True, verbose = 0):
     if filenames:
         C = cplex.Cplex()
-        if not verbose:
+        if verbose <= 0:
             C.set_log_stream(None)                                          # Don't print log on screen
             C.set_results_stream(None)                                      # Don't print progress on screen    
             C.set_warning_stream(None)
@@ -71,7 +71,7 @@ def addCuts2Cplex(filename, NB, A_cut, b_cut, filenames = True, newObj = True, v
             name = '___' + orgname + '___.mps'
             filename.write(name)
             C = cplex.Cplex()
-            if not verbose:
+            if verbose <= 0:
                 C.set_log_stream(None)                                          # Don't print log on screen
                 C.set_results_stream(None)                                      # Don't print progress on screen    
                 C.set_warning_stream(None)
@@ -100,11 +100,11 @@ def addUserCut(M,
     getfromCPLEX_Obj,
     cutType = "GMI",
     cutDetails = dict(),
-    verbose = False,
+    verbose = 0,
     returnans = False
     ):
     """
-    Mnew, MnewG = addUserCut(M, cont, getfromCPLEX_Obj, cutType = "GMI", cutDetails = dict(), verbose=False, returnans = False)
+    Mnew, MnewG = addUserCut(M, cont, getfromCPLEX_Obj, cutType = "GMI", cutDetails = dict(), verbose = 0, returnans = False)
     INPUTS
     cont = 0/1 vector indicating which variables are continuous.
     M - LP relaxation of MIP object (Should be in standard form)
@@ -164,7 +164,7 @@ def addUserCut(M,
         else:
             nRows = cutDetails["nRows"]
             if nRows > np.sum(badrows):
-                if verbose:
+                if verbose > 0:
                     print("Too Few badrows for X cut")
                 C_cut = M
                 C_cut_GMI = addCuts2Cplex(
@@ -187,7 +187,7 @@ def addUserCut(M,
                 ans["muMat"],
                 cont[N_in].astype(int),
                 sparse = True,
-                verbose = verbose
+                verbose = verbose - 1
             )
             C_cut = addCuts2Cplex(
                 M,
@@ -212,7 +212,7 @@ def addUserCut(M,
             nRows = cutDetails["nRows"]
             nBad = cutDetails["nBad"]
             if nBad > nRows:
-                if verbose:
+                if verbose > 0:
                     print("nBad > nRows is not allowed!")            
                 C_cut = M
                 C_cut_GMI = addCuts2Cplex(
@@ -223,7 +223,7 @@ def addUserCut(M,
                     filenames = False, 
                     )
             if nBad > np.sum(badrows):
-                if verbose:
+                if verbose > 0:
                     print("Too Few badrows for X cut")
                 C_cut = M
                 C_cut_GMI = addCuts2Cplex(
@@ -238,7 +238,7 @@ def addUserCut(M,
                 ans = Rows4Xcut(x_B, nRows, nCuts, int_var[B_in], nBad)
                 allGood = True
         if allGood:
-            if verbose:
+            if verbose > 0:
                 print(ans)
             (A_GX, b_GX) = GXLift(
                 getfromCPLEX_Obj["Tableaux_NB"], 
@@ -248,7 +248,7 @@ def addUserCut(M,
                 ans["fMat"],
                 cont[N_in].astype(int),
                 sparse = True,
-                verbose = verbose
+                verbose = verbose - 1
             )
             C_cut = addCuts2Cplex(
                 M,
@@ -278,10 +278,10 @@ def ChooseBestCuts(  M,
     Nrounds = 5,
     withGMI = False,
     return_bestcut_param = False,
-    verbose = False
+    verbose = 0
     ):
     """
-    Mnew = ChooseBestCuts(  M,  cont, getfromCPLEX_Obj, cutType = "GX",  cutDetails = {'nRows':2, 'nCuts':2, 'nBad':1}, Nrounds = 5, withGMI = False, return_bestcut_param = False, verbose = False) 
+    Mnew = ChooseBestCuts(  M,  cont, getfromCPLEX_Obj, cutType = "GX",  cutDetails = {'nRows':2, 'nCuts':2, 'nBad':1}, Nrounds = 5, withGMI = False, return_bestcut_param = False, verbose = 0) 
     Given a 
     model M, 
     continuity binary indicator cont,
@@ -294,8 +294,8 @@ def ChooseBestCuts(  M,
     return_bestcut_param = True will return the parameters corresponding to best cut
     """
     if getfromCPLEX_Obj is None:
-        M_std = Cplex2StdCplex(M, MIP=False, MIPobject = True, verbose = verbose)
-        getfromCPLEX_Obj = getfromCPLEX(M_std, solution = True, objective = True, tableaux = False, basic = True, TablNB = True, verbose=verbose)
+        M_std = Cplex2StdCplex(M, MIP=False, MIPobject = True, verbose = verbose-1)
+        getfromCPLEX_Obj = getfromCPLEX(M_std, solution = True, objective = True, tableaux = False, basic = True, TablNB = True, verbose=verbose-1)
         if M_std.solution.get_status_string() != 'optimal':
             print('Error: LP Not solved to Optimality')
             return None
@@ -305,12 +305,12 @@ def ChooseBestCuts(  M,
     for i in np.arange(Nrounds):
         Mnew, MnewG,ans = addUserCut(M_std, cont, 
             getfromCPLEX_Obj, cutType = cutType, 
-            cutDetails = cutDetails, returnans = True,verbose = verbose)
+            cutDetails = cutDetails, returnans = True,verbose = verbose-1)
         if withGMI:
             Mod = MnewG
         else:
             Mod = Mnew
-        if not verbose:
+        if verbose <= 0:
             Mod.set_log_stream(None)                                          # Don't print log on screen
             Mod.set_results_stream(None)                                      # Don't print progress on screen    
             Mod.set_warning_stream(None)
@@ -491,7 +491,7 @@ def XGauge(mu, b, x):
     return XG
 
 
-def XLift(N, b, RowMat, muMat, cont_NB, sparse = False, verbose = False):
+def XLift(N, b, RowMat, muMat, cont_NB, sparse = False, verbose = 0):
     """
     (A_Xcut, b_Xcut) = XLift(N, b, RowMat, muMat, cont_NB)
     INPUTS:
@@ -578,7 +578,7 @@ def XLift(N, b, RowMat, muMat, cont_NB, sparse = False, verbose = False):
                 A_Xcut[cut, var] = lifting
                 # End of else for lifting of integer variable
             # End of var for loop
-        if (verbose and (cut+1)%10 == 0):
+        if (verbose > 0 and (cut+1)%10 == 0):
             print('cut ' + str(cut+1) + ' generated' )
         # End of cut for loop
     return (A_Xcut, b_Xcut)
@@ -612,7 +612,7 @@ def GXGaugeA(mu, f, b):
     return a_Actual
 
 
-def GXLift(N, b, RowMat, muMat, fMat, cont_NB, sparse = False, verbose = False):
+def GXLift(N, b, RowMat, muMat, fMat, cont_NB, sparse = False, verbose = 0):
     """
     (A_GXcut, b_GXcut) = GXLift(N, b, RowMat, muMat, fMat, cont_NB, sparse= False, verbose = False)
     INPUTS:
@@ -686,7 +686,7 @@ def GXLift(N, b, RowMat, muMat, fMat, cont_NB, sparse = False, verbose = False):
                     for direction in np.arange(n):
                         # Solving a 1d convex IP in each dimension
                         if lifting == 0: # Cannot do better
-                            if verbose:
+                            if verbose > 0:
                                 print('Broken')
                             break
                         shift = np.zeros((n,1))
@@ -724,7 +724,7 @@ def GXLift(N, b, RowMat, muMat, fMat, cont_NB, sparse = False, verbose = False):
                 A_GXcut[cut, var] = lifting
                 # End of else for lifting of integer variable
         #     End of var for loop
-        if (verbose and (cut+1)%10 == 0):
+        if (verbose > 0 and (cut+1)%10 == 0):
             print('cut ' + str(cut+1) + ' generated' )
         # End of cut for loop
     return (A_GXcut, b_GXcut)

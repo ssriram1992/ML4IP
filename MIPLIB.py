@@ -18,7 +18,7 @@ filename = 'enlight13'
 prefix = './MIPLIB/'
 postfix = '.mps'
 
-verbose = True # Verbose solving of cplex models. Keeping this true can help in  debugging.
+verbose = 1000 # Verbose solving of cplex models. Keeping this true can help in  debugging.
 
 ################################
 

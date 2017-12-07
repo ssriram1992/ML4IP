@@ -92,9 +92,9 @@ def createNewMip(filename, random = True, f = None, A = None, b = None, Aeq = No
     return (f, A, b, Aeq, beq, lb, ub, cont)
 
     
-def Cplex2StdCplex(filename, MIP = False, verbose = False, MIPobject = False):
+def Cplex2StdCplex(filename, MIP = False, verbose = 0, MIPobject = False):
     """
-    C = Cplex2StdCplex(filename, MIP = False, verbose = False, MIPobject = False)
+    C = Cplex2StdCplex(filename, MIP = False, verbose = 0, MIPobject = False)
     Reads in a filename containing details for mixed integer problem not necessarily in a standard form.
     Returns a CPLEX object with the problem in a standard form min cTTx s.t. Ax = b; x >= 0 and integer constraints.
     If MIP = False, then an LP relaxed object is returned otherwise an MIP object is returned.
@@ -106,7 +106,7 @@ def Cplex2StdCplex(filename, MIP = False, verbose = False, MIPobject = False):
         M = filename
     else:
         M = cplex.Cplex()
-        if not verbose:
+        if  verbose <= 0:
              Mod.set_log_stream(None)                                          # Don't print log on screen
              Mod.set_results_stream(None)                                      # Don't print progress on screen    
              Mod.set_warning_stream(None)
@@ -162,7 +162,7 @@ def Cplex2StdCplex(filename, MIP = False, verbose = False, MIPobject = False):
             ineq = ineq+1
             b.append(sign*rhs[i])
     # Verbose printing
-    if verbose:
+    if verbose > 0:
         print("Constraint matrices extracted. Eq: ", eq, " Ineq: ", ineq-eq, ' Nvar: ', len(f))
     # Adding the upper bound as regular constraint
     for i in range(Nvar):
@@ -173,7 +173,7 @@ def Cplex2StdCplex(filename, MIP = False, verbose = False, MIPobject = False):
             Aval.append(1.0)
             b.append(temp)  
             ineq = ineq+1
-    if verbose:
+    if verbose > 0:
         print("Upper bound constraints added. Eq: ", eq, " Ineq: ", ineq-eq, ' Nvar: ', len(f))
     # Adding the lower bound as regular constraint
     badlb = 0
@@ -216,7 +216,7 @@ def Cplex2StdCplex(filename, MIP = False, verbose = False, MIPobject = False):
             if MIP:
                 integrality.append(integrality[i])
             badlb = badlb+1
-    if verbose:
+    if verbose > 0:
         print("Lower bound constraints added. Eq: ", eq, " Ineq: ", ineq-eq, ' Nvar: ', len(f))
     Nvar = len(f)
     slack = 0
@@ -228,7 +228,7 @@ def Cplex2StdCplex(filename, MIP = False, verbose = False, MIPobject = False):
         f.append(0)
         if MIP:
             integrality.append('C')
-    if verbose:
+    if verbose > 0:
         print("Slacks added. Eq: ", eq, " Ineq: ", ineq-eq, ' Nvar: ', len(f))
     if M.objective.sense[M.objective.get_sense()] == 'maximize':
             f = [-fi for fi in f]
@@ -332,7 +332,7 @@ def getfromCPLEX(M,
     tableaux = True, 
     basic = True, 
     TablNB = True,
-    precission = 13, verbose = False, ForceSolve = False):
+    precission = 13, verbose = 0, ForceSolve = False):
     """
     Given a CPLEX model M
         Sol = getfromCPLEX(M,  solution = True, objective = True,   tableaux = True, basic = True, TablNB = True, precission = 13)
@@ -345,7 +345,7 @@ def getfromCPLEX(M,
     basic       when true returns the indices of basic variables in the optimal basis
     precission  number of decimal points to use in the simplex Tableaux
     """
-    if not verbose:
+    if verbose <= 0 :
         M.set_log_stream(None)                                          # Don't print log on screen
         M.set_results_stream(None)                                      # Don't print progress on screen    
         M.set_warning_stream(None)
@@ -389,7 +389,7 @@ def getfromCPLEX(M,
             N_in = np.array(list(set(range(nVar))-set(B_in))) # Non basic is 1:nVar \setminus tBasic
             redundantRow = -h1[b2].copy()-1
             usefulRows = np.array(list(set(range(nCon))-set(redundantRow))) # All rows \setminus redundant rows
-            if verbose:
+            if verbose > 0:
                 print('Redundant rows: ',redundantRow)
         # Basic variables
         if basic:
