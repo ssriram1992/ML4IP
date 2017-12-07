@@ -171,6 +171,11 @@ class MIP:
             self.Aeq[negb,:] = -self.Aeq[negb,:]
             self.beq[negb,:] = -self.beq[negb,:]           
         # End of function
+    def write(self, name):
+        np.savetxt(name + '_Aeq.csv', self.Aeq, delimiter = ',')
+        np.savetxt(name + '_beq.csv', self.beq, delimiter = ',')
+        np.savetxt(name + '_obj.csv', self.f, delimiter = ',')
+        np.savetxt(name + '_cont.csv', self.cont, delimiter = ',')
     def size(self):
         """
         Returns the number of variables, number of constraints and number of integer

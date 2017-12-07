@@ -3,6 +3,7 @@ import scipy as sp
 import scipy.sparse
 from ReprVars import *
 import cplex
+from CPLEXInterface import *
 
 
 
@@ -54,11 +55,36 @@ def addCuts(inMIP, N_in, cutA, cutb):
 
 
 
-def addCuts2Cplex(filename, NB, A_cut, b_cut):
-    C = cplex.Cplex()
-    C.read(filename)
+def addCuts2Cplex(filename, NB, A_cut, b_cut, filenames = True, newObj = True, verbose = False):
+    if filenames:
+        C = cplex.Cplex()
+        if not verbose:
+            C.set_log_stream(None)                                          # Don't print log on screen
+            C.set_results_stream(None)                                      # Don't print progress on screen    
+            C.set_warning_stream(None)
+        C.read(filename)
+    else:
+        if newObj:
+            orgname = filename.get_problem_name()
+            if orgname == '':
+                orgname = str(str(int(filename.get_time()*1000)))
+            name = '___' + orgname + '___.mps'
+            filename.write(name)
+            C = cplex.Cplex()
+            if not verbose:
+                C.set_log_stream(None)                                          # Don't print log on screen
+                C.set_results_stream(None)                                      # Don't print progress on screen    
+                C.set_warning_stream(None)
+            C.read(name)
+            C.set_problem_name(orgname)
+        else:
+            C = filename
     A_cut = A_cut.tolist()
-    b_cut = b_cut.squeeze().tolist()
+    b_cut = b_cut.squeeze()
+    if b_cut.shape == ():
+        b_cut = [b_cut.tolist()]
+    else:
+        b_cut = b_cut.tolist()
     NB = NB.tolist()
     for i in range(len(b_cut)):
         C.linear_constraints.add(
@@ -67,6 +93,237 @@ def addCuts2Cplex(filename, NB, A_cut, b_cut):
             rhs = [b_cut[i]]
             )
     return C
+
+
+def addUserCut(M,
+    cont,
+    getfromCPLEX_Obj,
+    cutType = "GMI",
+    cutDetails = dict(),
+    verbose = False,
+    returnans = False
+    ):
+    """
+    Mnew, MnewG = addUserCut(M, cont, getfromCPLEX_Obj, cutType = "GMI", cutDetails = dict(), verbose=False, returnans = False)
+    INPUTS
+    cont = 0/1 vector indicating which variables are continuous.
+    M - LP relaxation of MIP object (Should be in standard form)
+    getfromCPLEX_Obj = Dictionary Object with LP solution, Basic solution, Tableaux details
+    cutType = Type of cut to be added. Can be one of 
+            GMI
+            X
+            GX
+    cutDetails = Dictionary containing details for the type of cut to be implemented
+        For GMI: Optionally rows can be given for which rows are the cuts required
+        For X cuts: Either nRows, nCuts are required  or ans with RowMat, muMat is required
+        For GX cuts: Either nRows, nBad, nCuts are required  or ans with RowMat, fMat, muMat is required
+    returnans : Returns the RowMat, fMat, muMat if True; works only for X and GX cuts
+    OUTPUTS
+    Mnew, MnewG = New object (not necessarily in standard form) with the cuts added , with cuts and GMI added
+    """    
+    B_in = getfromCPLEX_Obj["Basic"]
+    N_in = getfromCPLEX_Obj["NonBasic"]
+    x_B = getfromCPLEX_Obj["Sol_Basic"]
+    int_var = 1-cont
+    badrows = intRows(x_B, int_var[B_in].astype(int))    
+    if "GMIrows" in cutDetails:
+        GMIrows = cutDetails["GMIrows"]
+    else:
+        GMIrows = badrows
+    # if "sparse" in cutDetails:
+    #     sparse = cutDetails["sparse"]
+    # else:
+    #     sparse = False
+    (A_GMI, b_GMI) = GMI(   
+            getfromCPLEX_Obj["Tableaux_NB"].todense().A,
+            -x_B,       # "-" sign because in b+\Z^n, b is the negative of the LP Basic solution
+            GMIrows,
+            cont[N_in.astype(int)]
+            )
+    if cutType == "GMI":
+        C_cut = addCuts2Cplex(
+            M, 
+            NB = N_in,
+            A_cut = A_GMI,
+            b_cut = b_GMI,
+            filenames = False, 
+            )
+        C_cut_GMI = addCuts2Cplex(
+            M, 
+            NB = N_in,
+            A_cut = A_GMI,
+            b_cut = b_GMI,
+            filenames = False, 
+            )
+        ans = GMIrows
+    if cutType == "X":
+        allGood = False
+        if ("ans" in cutDetails):
+            allGood = True
+            ans = cutDetails["ans"]
+        else:
+            nRows = cutDetails["nRows"]
+            if nRows > np.sum(badrows):
+                if verbose:
+                    print("Too Few badrows for X cut")
+                C_cut = M
+                C_cut_GMI = addCuts2Cplex(
+                    M, 
+                    NB = N_in,
+                    A_cut = A_GMI,
+                    b_cut = b_GMI,
+                    filenames = False, 
+                    )
+                ans = None
+            else:
+               nCuts = cutDetails["nCuts"]
+               ans = Rows4Xcut(x_B, nRows, nCuts, int_var[B_in], nRows)
+               allGood = True
+        if allGood:
+            (A_X, b_X) = XLift(
+                getfromCPLEX_Obj["Tableaux_NB"], 
+                -x_B,
+                ans["RowMat"],
+                ans["muMat"],
+                cont[N_in].astype(int),
+                sparse = True,
+                verbose = verbose
+            )
+            C_cut = addCuts2Cplex(
+                M,
+                NB = getfromCPLEX_Obj["NonBasic"],
+                A_cut = A_X,
+                b_cut = b_X,
+                filenames = False
+                )
+            C_cut_GMI = addCuts2Cplex(
+                M,
+                NB = getfromCPLEX_Obj["NonBasic"],
+                A_cut = np.concatenate((A_X, A_GMI), axis = 0),
+                b_cut = np.concatenate((b_X, b_GMI), axis = 0),
+                filenames = False
+                )
+    if cutType == "GX":
+        allGood = False
+        if ("ans" in cutDetails):
+            allGood = True
+            ans = cutDetails["ans"]
+        else:
+            nRows = cutDetails["nRows"]
+            nBad = cutDetails["nBad"]
+            if nBad > nRows:
+                if verbose:
+                    print("nBad > nRows is not allowed!")            
+                C_cut = M
+                C_cut_GMI = addCuts2Cplex(
+                    M, 
+                    NB = N_in,
+                    A_cut = A_GMI,
+                    b_cut = b_GMI,
+                    filenames = False, 
+                    )
+            if nBad > np.sum(badrows):
+                if verbose:
+                    print("Too Few badrows for X cut")
+                C_cut = M
+                C_cut_GMI = addCuts2Cplex(
+                    M, 
+                    NB = N_in,
+                    A_cut = A_GMI,
+                    b_cut = b_GMI,
+                    filenames = False, 
+                    )
+            else:
+                nCuts = cutDetails["nCuts"]
+                ans = Rows4Xcut(x_B, nRows, nCuts, int_var[B_in], nBad)
+                allGood = True
+        if allGood:
+            if verbose:
+                print(ans)
+            (A_GX, b_GX) = GXLift(
+                getfromCPLEX_Obj["Tableaux_NB"], 
+                -x_B,
+                ans["RowMat"],
+                ans["muMat"],
+                ans["fMat"],
+                cont[N_in].astype(int),
+                sparse = True,
+                verbose = verbose
+            )
+            C_cut = addCuts2Cplex(
+                M,
+                NB = getfromCPLEX_Obj["NonBasic"],
+                A_cut = A_GX,
+                b_cut = b_GX,
+                filenames = False
+                )
+            C_cut_GMI = addCuts2Cplex(
+                M,
+                NB = getfromCPLEX_Obj["NonBasic"],
+                A_cut = np.concatenate((A_GX, A_GMI), axis = 0),
+                b_cut = np.concatenate((b_GX, b_GMI), axis = 0),
+                filenames = False
+                )
+    if returnans:
+        return C_cut, C_cut_GMI, ans 
+    else:
+        return C_cut, C_cut_GMI
+
+
+def ChooseBestCuts(  M, 
+    cont,
+    getfromCPLEX_Obj = None,
+    cutType = "GX", 
+    cutDetails = {'nRows':2, 'nCuts':2, 'nBad':1},
+    Nrounds = 5,
+    withGMI = False,
+    return_bestcut_param = False,
+    verbose = False
+    ):
+    """
+    Mnew = ChooseBestCuts(  M,  cont, getfromCPLEX_Obj, cutType = "GX",  cutDetails = {'nRows':2, 'nCuts':2, 'nBad':1}, Nrounds = 5, withGMI = False, return_bestcut_param = False, verbose = False) 
+    Given a 
+    model M, 
+    continuity binary indicator cont,
+    getfromCPLEX_Obj,
+    cutType,
+    cutDetails,
+    Number of rounds of user cut to be generated Nrounds,
+    it chooses the best set of cuts from Nrounds rounds. 
+    Improvement with or without GMI is considered using withGMI flag
+    return_bestcut_param = True will return the parameters corresponding to best cut
+    """
+    if getfromCPLEX_Obj is None:
+        M_std = Cplex2StdCplex(M, MIP=False, MIPobject = True, verbose = verbose)
+        getfromCPLEX_Obj = getfromCPLEX(M_std, solution = True, objective = True, tableaux = False, basic = True, TablNB = True, verbose=verbose)
+        if M_std.solution.get_status_string() != 'optimal':
+            print('Error: LP Not solved to Optimality')
+            return None
+    else:
+        M_std = M 
+    bestObj = getfromCPLEX_Obj["Objective"]-1
+    for i in np.arange(Nrounds):
+        Mnew, MnewG,ans = addUserCut(M_std, cont, 
+            getfromCPLEX_Obj, cutType = cutType, 
+            cutDetails = cutDetails, returnans = True,verbose = verbose)
+        if withGMI:
+            Mod = MnewG
+        else:
+            Mod = Mnew
+        if not verbose:
+            Mod.set_log_stream(None)                                          # Don't print log on screen
+            Mod.set_results_stream(None)                                      # Don't print progress on screen    
+            Mod.set_warning_stream(None)
+        Mod.solve()
+        O = Mod.solution.get_objective_value()
+        if O > bestObj:
+            bestObj = O
+            bestMod = Mod
+            best_params = ans
+    if return_bestcut_param:
+        return bestMod, best_params
+    else:
+        return bestMod
 
 
 
@@ -155,7 +412,7 @@ def Rows4Xcut(x_B, nRows, nCuts, intVar, n_badrow):
         )
     # Note that badrow union goodrow = intVar
     if np.sum(intVar) < nRows: # Number of integer rows < number of rows to pick?
-        print("Too few rows to pick from") # Too bad! Can't do that!
+        print(np.sum(intVar), nRows, "Too few rows to pick from") # Too bad! Can't do that!
         return 
     if np.sum(badrow) < n_badrow: # If LP solution has only 1 bad row, and you are trying to pick 2 bad rows?
         print ("Too few bad rows")  # Too bad! Can't do that!
@@ -234,7 +491,7 @@ def XGauge(mu, b, x):
     return XG
 
 
-def XLift(N, b, RowMat, muMat, cont_NB):
+def XLift(N, b, RowMat, muMat, cont_NB, sparse = False, verbose = False):
     """
     (A_Xcut, b_Xcut) = XLift(N, b, RowMat, muMat, cont_NB)
     INPUTS:
@@ -242,6 +499,7 @@ def XLift(N, b, RowMat, muMat, cont_NB):
     b       LP solution
     muMat   A Nrow x Ncut matrix with each column being a mu vector for a cut. Sum across rows should be 1
     cont_NB boolean vector that says which of the non-basics are continuous to generate appropriate cut-coefficients
+    sparse  If set to True, it understands N as a scipy.sparse matrix
     """
     nCuts = RowMat.shape[1] 
     nVars = N.shape[1]
@@ -251,6 +509,9 @@ def XLift(N, b, RowMat, muMat, cont_NB):
     A_Xcut = np.zeros((nCuts, nVars))
     b_Xcut = np.ones((nCuts,1))
     cont = set(list(np.where(cont_NB)[0]))
+    # If N is sparse, convert it into csr format, that makes row splicing faster
+    if sparse:
+        N = N.tocsr()
     # One iteration of this loop for each cut
     for cut in np.arange(nCuts):
         # Get the rows of the non-basic used in this cut
@@ -264,15 +525,23 @@ def XLift(N, b, RowMat, muMat, cont_NB):
         bb = bb.reshape((bb.shape[0],1))
         # Using the function defined before to get the facets of the cross polytope
         ### a_Actual = GXGaugeA(mu, f, bb)
+        # Making a smaller matrix just with the rows used in this cut.
+        if sparse:
+            N1 = N[rows,:].tocsc()
+        else:
+            N1 = N[rows,:]
         # For each column of non-basic, creating lifting or gauge
         for var in np.arange(nVars):
             # Non-basic
-            x = N[rows, var]
+            if sparse: #If sparse, conversion to ndArray is required
+                x = N1[:,var].A
+            else:
+                x = N1[:,var]
             x = x.reshape((x.shape[0],1))
             if var in cont:
                 # If it is continuous variable column, then calculate gauge
                 # else the lifting
-                A_Xcut[cut, var] = XGauge(mu, b, x)["gauge"]
+                A_Xcut[cut, var] = XGauge(mu, bb, x)["gauge"]
             else:
                 # "else the lifting" part
                 n = np.shape(mu)[0]     # Dimensionality of the crosspolytope
@@ -309,7 +578,8 @@ def XLift(N, b, RowMat, muMat, cont_NB):
                 A_Xcut[cut, var] = lifting
                 # End of else for lifting of integer variable
             # End of var for loop
-        print('cut ' + str(cut+1) + ' generated' )
+        if (verbose and (cut+1)%10 == 0):
+            print('cut ' + str(cut+1) + ' generated' )
         # End of cut for loop
     return (A_Xcut, b_Xcut)
     # End of lifting function
@@ -344,7 +614,7 @@ def GXGaugeA(mu, f, b):
 
 def GXLift(N, b, RowMat, muMat, fMat, cont_NB, sparse = False, verbose = False):
     """
-    (A_GXcut, b_GXcut) = GXLift(N, b, RowMat, muMat, fMat, cont_NB)
+    (A_GXcut, b_GXcut) = GXLift(N, b, RowMat, muMat, fMat, cont_NB, sparse= False, verbose = False)
     INPUTS:
     N       Nonbasic matrix
     b       LP solution (basic)
@@ -406,12 +676,12 @@ def GXLift(N, b, RowMat, muMat, fMat, cont_NB, sparse = False, verbose = False):
                     primshift = (xfrac > bb)*1 # Is x outside [b-1, b]^n hypercube?
                     xmid = xfrac - primshift # Bring x into [b-1, b]^n hypercube
                     lifting = 1 # Initialization
-                    if verbose:
-                        print({
-                            'xfrac':xfrac,
-                            'xmid':xmid,
-                            'bb': bb
-                            })
+                    # if verbose:
+                    #     print({
+                    #         'xfrac':xfrac,
+                    #         'xmid':xmid,
+                    #         'bb': bb
+                    #         })
                     # Calculating the best gauge in each drection
                     for direction in np.arange(n):
                         # Solving a 1d convex IP in each dimension
@@ -423,15 +693,15 @@ def GXLift(N, b, RowMat, muMat, fMat, cont_NB, sparse = False, verbose = False):
                         shift[direction,0] = 1 # shift is a coordinate unit vector now
                         lb = np.ceil((bb[direction, 0]-1)/mu[direction, 0])
                         ub = np.floor((bb[direction, 0])/mu[direction, 0])
-                        if verbose:
-                            print(lb, ub, lifting)
+                        # if verbose:
+                        #     print(lb, ub, lifting)
                         while True:
                             mid = np.round((lb+ub)/2.0,0)
                             temp = a_Actual.dot(xmid+mid*shift) # scalar product with all normals
                             t2 = np.argmax(temp) # which'th normal achieves the gauge
                             t1 = temp[t2]        # the gauge
-                            if verbose:
-                                print(t1)
+                            # if verbose:
+                            #     print(t1)
                             if a_Actual[t2, direction] < 0:
                                 lb = mid
                             else:
@@ -439,12 +709,12 @@ def GXLift(N, b, RowMat, muMat, fMat, cont_NB, sparse = False, verbose = False):
                             if ub-lb <= 1:
                                 break
                         if lb == ub:
-                            if verbose:
-                                print('Here 1', lifting, t1)
+                            # if verbose:
+                            #     print('Here 1', lifting, t1)
                             lifting = np.minimum(lifting, t1)                        
                         else:
-                            if verbose:
-                                print('Here 2', lifting,  np.max(a_Actual.dot(xmid+lb*shift)),  np.max(a_Actual.dot(xmid+ub*shift)))
+                            # if verbose:
+                            #     print('Here 2', lifting,  np.max(a_Actual.dot(xmid+lb*shift)),  np.max(a_Actual.dot(xmid+ub*shift)))
                             lifting = np.min([lifting, 
                                 np.max(a_Actual.dot(xmid+lb*shift)),
                                 np.max(a_Actual.dot(xmid+ub*shift)) ])
@@ -453,8 +723,9 @@ def GXLift(N, b, RowMat, muMat, fMat, cont_NB, sparse = False, verbose = False):
                     lifting = 0
                 A_GXcut[cut, var] = lifting
                 # End of else for lifting of integer variable
-            # End of var for loop
-        print('cut ' + str(cut) + 'generated' )
+        #     End of var for loop
+        if (verbose and (cut+1)%10 == 0):
+            print('cut ' + str(cut+1) + ' generated' )
         # End of cut for loop
     return (A_GXcut, b_GXcut)
     # End of lifting function

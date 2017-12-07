@@ -76,12 +76,13 @@ print('Making me believe CPLEX is doing some presolving etc.')
 # Get the set of basic variables from CPLEX
 Basics = np.array(C.solution.basis.get_basis()[0])
 
+# Total number of variables in the problem
+nVar = np.size(Basics)
+
 # Indices corresponding to basic and non-basic variables
 B_in = np.where(Basics)[0]
 N_in = np.array(list(set(range(nVar))-set(B_in)))
 
-# Total number of variables in the problem
-nVar = np.size(Basics)
 
 # The set of constraints in the problem
 rows = C.linear_constraints.get_rows()

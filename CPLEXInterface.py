@@ -92,10 +92,26 @@ def createNewMip(filename, random = True, f = None, A = None, b = None, Aeq = No
     return (f, A, b, Aeq, beq, lb, ub, cont)
 
     
-def Cplex2StdCplex(filename, MIP = False, verbose = False):
-    M = cplex.Cplex()
-    # Load file
-    M.read(filename)
+def Cplex2StdCplex(filename, MIP = False, verbose = False, MIPobject = False):
+    """
+    C = Cplex2StdCplex(filename, MIP = False, verbose = False, MIPobject = False)
+    Reads in a filename containing details for mixed integer problem not necessarily in a standard form.
+    Returns a CPLEX object with the problem in a standard form min cTTx s.t. Ax = b; x >= 0 and integer constraints.
+    If MIP = False, then an LP relaxed object is returned otherwise an MIP object is returned.
+    If MIPobject = False, it is assumed the input is a file name. If True, then the 
+    input is considered to be a Cplex object. Note that the changes caused here could alter the input Cplex object
+    as cplex object is passed as reference in python
+    """
+    if MIPobject:
+        M = filename
+    else:
+        M = cplex.Cplex()
+        if not verbose:
+             Mod.set_log_stream(None)                                          # Don't print log on screen
+             Mod.set_results_stream(None)                                      # Don't print progress on screen    
+             Mod.set_warning_stream(None)
+        # Load file
+        M.read(filename)
     # Generates the sparse, row-column-value representation of constraint matrices
     # Get the detailed form of variables
     lb = M.variables.get_lower_bounds()
@@ -221,6 +237,8 @@ def Cplex2StdCplex(filename, MIP = False, verbose = False):
     M_std.objective.set_sense(M_std.objective.sense.minimize)
     M_std.linear_constraints.add(rhs = beq+b, senses = ['E']*(ineq))
     M_std.linear_constraints.set_coefficients(zip(Aeqrowind+Arowind, Aeqcolind+Acolind, Aeqval+Aval))
+    name = str.replace(str.replace(M.get_problem_name(), '/','_'),'.','_') # Get the name replacing any . and / signs to _
+    M_std.set_problem_name(name)
     if MIP:
         M_std.variables.set_types(zip(range(len(f)), integrality))
     return M_std
@@ -330,6 +348,7 @@ def getfromCPLEX(M,
     if not verbose:
         M.set_log_stream(None)                                          # Don't print log on screen
         M.set_results_stream(None)                                      # Don't print progress on screen    
+        M.set_warning_stream(None)
         M.parameters.simplex.display.set(2)
     # First let us turn on all presolve procedures and run 
     # Straightforward Simplex on the primal problem 
@@ -360,14 +379,22 @@ def getfromCPLEX(M,
             # Finding the set of basic variables from the simplex tableaux
             nVar = M.variables.get_num() # Number of variables
             nCon = M.linear_constraints.get_num() # Number of constraints
-            # Get the set of basic variables from CPLEX
-            Basics = np.array(M.solution.basis.get_basis()[0])
-            B_in = np.where(Basics)[0]
+            # Get the set of basic variables from CPLEX            
+            h1,h2 = M.solution.basis.get_header()
+            h1 = np.array(h1)
+            h2 = np.array(h2)
+            b1 = np.where(h1>=0)[0]
+            b2 = np.where(h1<0)[0]
+            B_in = np.sort(h1[b1]).copy()
             N_in = np.array(list(set(range(nVar))-set(B_in))) # Non basic is 1:nVar \setminus tBasic
+            redundantRow = -h1[b2].copy()-1
+            usefulRows = np.array(list(set(range(nCon))-set(redundantRow))) # All rows \setminus redundant rows
+            if verbose:
+                print('Redundant rows: ',redundantRow)
         # Basic variables
         if basic:
-            Sol["Basic"] = B_in
-            Sol["NonBasic"] = N_in
+            Sol["Basic"] = np.sort(B_in)
+            Sol["NonBasic"] = np.sort(N_in)
         # Tableaux
         if tableaux:
             tTabl = np.array(M.solution.advanced.binvarow())
@@ -377,19 +404,22 @@ def getfromCPLEX(M,
             # The set of constraints in the problem
             rows = M.linear_constraints.get_rows()
             # The RHS of the Ax = b constraints
-            b = M.linear_constraints.get_rhs()
+            b = np.array(M.linear_constraints.get_rhs())
             # initializing row_index/colum_index/data to initialize scipy.sparse matrix
             # Remember CPLEX returns the rows in a sparse form - (cplex.sparse form but not the scipy.sparse form )
             # We stick to scipy.sparse as that has better library functions, documentation etc.
             row_ind = np.array([]).reshape(0,)
             col_ind = np.array([]).reshape(0,)
             data = np.array([]).reshape(0,)
+            rowcount = 0
             for i,row in zip(range(len(rows)), rows):
-                t1 = np.array(row.ind)
-                row_ind = np.concatenate((row_ind, np.zeros(t1.shape) + i))
-                col_ind = np.concatenate((col_ind, t1))
-                t2 = np.array(row.val)
-                data = np.concatenate((data, t2))
+                if i in usefulRows:
+                    t1 = np.array(row.ind)
+                    row_ind = np.concatenate((row_ind, np.zeros(t1.shape) + rowcount))
+                    rowcount = rowcount + 1
+                    col_ind = np.concatenate((col_ind, t1))
+                    t2 = np.array(row.val)
+                    data = np.concatenate((data, t2))
             # Creating the sparse matrix
             Aeq = sp.sparse.csc_matrix((data, (row_ind, col_ind)))
             # Basic matrix
@@ -399,7 +429,10 @@ def getfromCPLEX(M,
             # Tableau of non-basic variables is just B^{-1}N. So we are solving the linear system B*tTabl = N
             tTablNB = sp.sparse.linalg.spsolve(B, N)
             # The basic solution is B^{-1}b. So we are solving the linear system B*x_B = b
-            x_B = sp.sparse.linalg.spsolve(B, b)
+            x_B = sp.sparse.linalg.spsolve(B, b[usefulRows])
             Sol["Tableaux_NB"] = tTablNB
             Sol["Sol_Basic"] = x_B
+            Sol["B"] = B
+            Sol["N"] = N
+            Sol["b"] = b[usefulRows]
     return Sol
