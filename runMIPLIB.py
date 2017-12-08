@@ -15,6 +15,7 @@ def run_compare_root(Batch = "A", Num_IP = 10, Nvar = 25,
                 Ncons = 10, NumRounds = 10, nRows = [2,3,5,10], 
                 nCuts = 10, path = './', verbose = 0):    
     values = []
+    names = []
     problem = 0
     while problem < Num_IP:
         A = np.random.uniform(-5,6,size = (Ncons, Nvar)) 
@@ -39,8 +40,10 @@ def run_compare_root(Batch = "A", Num_IP = 10, Nvar = 25,
         values.append(v)
         if verbose > 1:
             print(name +" completed")
+        names.append(name)
         problem = problem + 1
     np.savetxt(path + Batch + "_Sol.csv", np.array(values), delimiter = ',', fmt = '%6.6f')
+    np.savetxt(path + Batch + "_names.csv", np.array(names), delimiter = ',', fmt = '%s')
     return values
 
 
