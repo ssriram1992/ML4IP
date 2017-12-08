@@ -11,7 +11,9 @@ from Cuts import *
 from ReprVars import *
 from CPLEXInterface import *
 
-def run_compare_root(Batch = "A", Num_IP = 10, Nvar = 25, Ncons = 10, NumRounds = 10, nRows = [2,3,5,10], nCuts = 10, verbose = 0):    
+def run_compare_root(Batch = "A", Num_IP = 10, Nvar = 25, 
+                Ncons = 10, NumRounds = 10, nRows = [2,3,5,10], 
+                nCuts = 10, path = './', verbose = 0):    
     values = []
     problem = 0
     while problem < Num_IP:
@@ -29,17 +31,16 @@ def run_compare_root(Batch = "A", Num_IP = 10, Nvar = 25, Ncons = 10, NumRounds 
             'cont':cont
         })
         name = Batch + "_" + str(problem+1)
-        _,v = compare_root_problem(M, NumRounds, name = name, nRows = nRows, nCuts = nCuts, verbose = verbose-1)
+        _,v = compare_root_problem(M, NumRounds, name = name, nRows = nRows, nCuts = nCuts, verbose = verbose-1) 
         if v is None:
-            if verbose > 0:
-                print(name+" repeating with error")
             continue
-        M.write(name)
-        np.savetxt(name + "_Sol.csv", np.array(v), delimiter = ',')
+        M.write(name, path = path)
+        np.savetxt(path + name + "_Sol.csv", np.array(v), delimiter = ',', fmt = '%6.6f')
         values.append(v)
-        print(name+" completed")
+        if verbose > 1:
+            print(name +" completed")
         problem = problem + 1
-    np.savetxt(Batch + "_Sol.csv", np.array(values), delimiter = ',')
+    np.savetxt(path + Batch + "_Sol.csv", np.array(values), delimiter = ',', fmt = '%6.6f')
     return values
 
 
@@ -59,6 +60,11 @@ def compare_root_problem(M, NumRounds, nRows = [2,3,5,10], nBad = 1, nCuts = 10,
         if verbose > 0:
             print (name + ' '+C.solution.get_status_string())
         return None, None  
+    bad = np.where(intRows(LPS["Sol_Basic"], 1-cont[LPS["Basic"]].astype(int)))[0].size
+    if bad < np.max(np.array(nRows)):
+        if verbose > 0:
+            print(name + ' ' + "Not enough bad rows. # Bad rows: " + str(bad))
+        return None, None
     names.append('LP')
     values.append(LPS["Objective"])
     # Add GMI cuts for pure integer version
