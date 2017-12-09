@@ -13,7 +13,7 @@ from CPLEXInterface import *
 
 def run_compare_root(Batch = "A", Num_IP = 10, Nvar = 25, 
                 Ncons = 10, NumRounds = 10, nRows = [2,3,5,10], 
-                nCuts = 10, path = './', verbose = 0):    
+                nCuts = 10, path = './', verbose = 0, scratch = './'):    
     values = []
     names = []
     problem = 0
@@ -32,7 +32,7 @@ def run_compare_root(Batch = "A", Num_IP = 10, Nvar = 25,
             'cont':cont
         })
         name = Batch + "_" + str(problem+1)
-        _,v = compare_root_problem(M, NumRounds, name = name, nRows = nRows, nCuts = nCuts, verbose = verbose-1) 
+        _,v = compare_root_problem(M, NumRounds, name = name, nRows = nRows, nCuts = nCuts, verbose = verbose-1, scratch = scratch) 
         if v is None:
             continue
         M.write(name, path = path)
@@ -47,13 +47,27 @@ def run_compare_root(Batch = "A", Num_IP = 10, Nvar = 25,
     return values
 
 
-def compare_root_problem(M, NumRounds, nRows = [2,3,5,10], nBad = 1, nCuts = 10, verbose = 0, name = "_"):
+def run_Race_CPLEX(Batch, filename, path='./MIPLIB/'):
+    pass
+
+
+
+def compare_root_problem(M, NumRounds, nRows = [2,3,5,10], nBad = 1, nCuts = 10, verbose = 0, name = "_", isCplexObj = False, scratch = './'):
     """
     M is an "our" MIP object
     """
-    # Create Cplex Object
-    C = Py2Cplex(M)
-    cont = M.cont
+    if isCplexObj:
+        C = M
+        try:
+            temp = C.variables.get_types()
+            C.set_problem_type(C.problem_type.LP)
+        except Exception as e:
+            print("If CPLEX object is passed to compare_root_problem, it should be an MIP; "+str(e))
+        cont = [1 if i == 'C' else 0 for i in temp]        
+    else:        
+        # Create Cplex Object
+        C = Py2Cplex(M)
+        cont = M.cont
     C.set_problem_name(name)
     values = []
     names = []
@@ -71,12 +85,12 @@ def compare_root_problem(M, NumRounds, nRows = [2,3,5,10], nBad = 1, nCuts = 10,
     names.append('LP')
     values.append(LPS["Objective"])
     # Add GMI cuts for pure integer version
-    C_GMI_p,_ = addUserCut(C, cont*0, LPS, verbose = verbose - 1)
+    C_GMI_p,_ = addUserCut(C, cont*0, LPS, verbose = verbose - 1, scratch = scratch)
     C_GMI_p.solve()
     names.append('GMI_p')
     values.append(C_GMI_p.solution.get_objective_value())
     # Add GMI cuts for mixed integer version
-    C_GMI_m,_ = addUserCut(C, cont, LPS, verbose = verbose - 1)
+    C_GMI_m,_ = addUserCut(C, cont, LPS, verbose = verbose - 1, scratch = scratch)
     C_GMI_m.solve()
     names.append('GMI_m')
     values.append(C_GMI_m.solution.get_objective_value())
@@ -90,7 +104,7 @@ def compare_root_problem(M, NumRounds, nRows = [2,3,5,10], nBad = 1, nCuts = 10,
                     cutType = "X",
                     Nrounds = NumRounds, 
                     cutDetails={'nRows':row_ct, 'nCuts':nCuts, 'nBad':1}, 
-                    return_bestcut_param=True, verbose = verbose - 1)
+                    return_bestcut_param=True, verbose = verbose - 1, scratch = scratch )
         names.append('C_X_p_'+str(row_ct))
         values.append(C_X_p.solution.get_objective_value())
         # Add XG cuts
@@ -99,11 +113,11 @@ def compare_root_problem(M, NumRounds, nRows = [2,3,5,10], nBad = 1, nCuts = 10,
                     Nrounds = NumRounds - 1,    # -1 because the best parameters from X will also be used here
                     withGMI = True,             # Differene between X and XG is by controlling this
                     cutDetails={'nRows':row_ct, 'nCuts':nCuts, 'nBad':1}, 
-                    return_bestcut_param=True, verbose = verbose - 1)
+                    return_bestcut_param=True, verbose = verbose - 1, scratch = scratch)
         names.append('C_XG_p_'+str(row_ct))
         # Generating an XG cuts with the best parameter of X
         _, C2_XG_p = addUserCut(C, cont*0, LPS, "X", 
-                            cutDetails={'ans':best_X_p},
+                            cutDetails={'ans':best_X_p}, scratch = scratch
                             )
         C2_XG_p.solve()
         values.append(np.maximum(
@@ -116,7 +130,7 @@ def compare_root_problem(M, NumRounds, nRows = [2,3,5,10], nBad = 1, nCuts = 10,
                     cutType = "X",
                     Nrounds = NumRounds, 
                     cutDetails={'nRows':row_ct, 'nCuts':nCuts, 'nBad':1}, 
-                    return_bestcut_param=True, verbose = verbose - 1)
+                    return_bestcut_param=True, verbose = verbose - 1, scratch = scratch)
         names.append('C_X_m_'+str(row_ct))
         values.append(C_X_m.solution.get_objective_value())
         # Add XG cuts
@@ -125,11 +139,11 @@ def compare_root_problem(M, NumRounds, nRows = [2,3,5,10], nBad = 1, nCuts = 10,
                     Nrounds = NumRounds - 1,    # -1 because the best parameters from X will also be used here
                     withGMI = True,             # Differene between X and XG is by controlling this
                     cutDetails={'nRows':row_ct, 'nCuts':nCuts, 'nBad':1}, 
-                    return_bestcut_param=True, verbose = verbose - 1)
+                    return_bestcut_param=True, verbose = verbose - 1, scratch = scratch)
         names.append('C_XG_m_'+str(row_ct))
         # Generating an XG cuts with the best parameter of X
         _, C2_XG_m = addUserCut(C, cont, LPS, "X", 
-                            cutDetails={'ans':best_X_m},
+                            cutDetails={'ans':best_X_m}, scratch = scratch
                             )
         C2_XG_m.solve()
         values.append(np.maximum(
@@ -145,7 +159,7 @@ def compare_root_problem(M, NumRounds, nRows = [2,3,5,10], nBad = 1, nCuts = 10,
                     cutType = "GX",
                     Nrounds = NumRounds, 
                     cutDetails={'nRows':row_ct, 'nCuts':nCuts, 'nBad':1}, 
-                    return_bestcut_param=True, verbose = verbose - 1)
+                    return_bestcut_param=True, verbose = verbose - 1, scratch = scratch)
         names.append('C_GX_p_'+str(row_ct))
         values.append(C_GX_p.solution.get_objective_value())
         # Add GXG cuts
@@ -154,11 +168,11 @@ def compare_root_problem(M, NumRounds, nRows = [2,3,5,10], nBad = 1, nCuts = 10,
                     Nrounds = NumRounds - 1,    # -1 because the best parameters from X will also be used here
                     withGMI = True,             # Differene between X and XG is by controlling this
                     cutDetails={'nRows':row_ct, 'nCuts':nCuts, 'nBad':1}, 
-                    return_bestcut_param=True, verbose = verbose - 1)
+                    return_bestcut_param=True, verbose = verbose - 1, scratch = scratch)
         names.append('C_GXG_p_'+str(row_ct))
         # Generating an XG cuts with the best parameter of X
         _, C2_GXG_p = addUserCut(C, cont*0, LPS, "GX", 
-                            cutDetails={'ans':best_GX_p},
+                            cutDetails={'ans':best_GX_p}, scratch = scratch
                             )
         C2_GXG_p.solve()
         values.append(np.maximum(
@@ -171,7 +185,7 @@ def compare_root_problem(M, NumRounds, nRows = [2,3,5,10], nBad = 1, nCuts = 10,
                     cutType = "GX",
                     Nrounds = NumRounds, 
                     cutDetails={'nRows':row_ct, 'nCuts':nCuts, 'nBad':1}, 
-                    return_bestcut_param=True, verbose = verbose - 1)
+                    return_bestcut_param=True, verbose = verbose - 1, scratch = scratch)
         names.append('C_GX_m_'+str(row_ct))
         values.append(C_GX_m.solution.get_objective_value())
         # Add GXG cuts
@@ -180,11 +194,11 @@ def compare_root_problem(M, NumRounds, nRows = [2,3,5,10], nBad = 1, nCuts = 10,
                     Nrounds = NumRounds - 1,    # -1 because the best parameters from X will also be used here
                     withGMI = True,             # Differene between X and XG is by controlling this
                     cutDetails={'nRows':row_ct, 'nCuts':nCuts, 'nBad':1}, 
-                    return_bestcut_param=True, verbose = verbose - 1)
+                    return_bestcut_param=True, verbose = verbose - 1, scratch = scratch)
         names.append('C_GXG_m_'+str(row_ct))
         # Generating an GXG cuts with the best parameter of GX
         _, C2_GXG_m = addUserCut(C, cont, LPS, "GX", 
-                            cutDetails={'ans':best_GX_m},
+                            cutDetails={'ans':best_GX_m}, scratch = scratch
                             )
         C2_GXG_m.solve()
         values.append(np.maximum(
@@ -235,7 +249,8 @@ def run_MIPLIB(problems = ['enlight9'],
   n_badrow = [1, 2],
   runGX = False,
   runX = False,
-  verbose = 0):
+  verbose = 0,
+  scratch = './'):
     """
     run_MIPLIB(problems = ['enlight9'], rowlengths = [2,3], nTrials = 2, prefix = './MIPLIB/', postfix = '.mps', nCuts=100, n_badrow = 1, runGX = False, runX = False, verbose=0)
     problems = set of MIPLIB problem names to run.
@@ -301,7 +316,7 @@ def run_MIPLIB(problems = ['enlight9'],
         C_GMI = addCuts2Cplex(filename = prefix+filename+'_std'+postfix,
                             NB = LPSolution["NonBasic"],
                             A_cut = A_GMI,
-                            b_cut = b_GMI)
+                            b_cut = b_GMI, scratch = scratch)
         GMIans = getfromCPLEX(C_GMI, tableaux = False, basic = False, TablNB = False)
         print('GMI:', GMIans["Objective"])
         # GMI complete
@@ -329,12 +344,12 @@ def run_MIPLIB(problems = ['enlight9'],
                         C_GX = addCuts2Cplex(filename = prefix+filename+'_std'+postfix,
                                             NB = LPSolution["NonBasic"],
                                             A_cut = A_GX,
-                                            b_cut = b_GX)
+                                            b_cut = b_GX, scratch = scratch)
                         # creating GXG model
                         C_GXG = addCuts2Cplex(filename = prefix+filename+'_std'+postfix,
                                             NB = LPSolution["NonBasic"],
                                             A_cut = np.concatenate((A_GX , A_GMI),axis=0),
-                                            b_cut = np.concatenate((b_GX,  b_GMI),axis=0))
+                                            b_cut = np.concatenate((b_GX,  b_GMI),axis=0), scratch = scratch)
                         # Solving the models with cuts
                         GXans = getfromCPLEX(C_GX, tableaux = False, basic = False, TablNB = False)
                         GXGans = getfromCPLEX(C_GXG, tableaux = False, basic = False, TablNB = False)
@@ -359,12 +374,12 @@ def run_MIPLIB(problems = ['enlight9'],
                     C_X = addCuts2Cplex(filename = prefix+filename+'_std'+postfix,
                                     NB = LPSolution["NonBasic"],
                                     A_cut = A_X,
-                                    b_cut = b_X)
+                                    b_cut = b_X, scratch = scratch)
                     # Creating the XG model
                     C_XG = addCuts2Cplex(filename = prefix+filename+'_std'+postfix,
                                         NB = LPSolution["NonBasic"],
                                         A_cut = np.concatenate((A_X , A_GMI),axis=0),
-                                        b_cut = np.concatenate((b_X,  b_GMI),axis=0))
+                                        b_cut = np.concatenate((b_X,  b_GMI),axis=0), scratch = scratch)
                     # Solving the models with cuts
                     Xans = getfromCPLEX(C_X, tableaux = False, basic = False, TablNB = False)
                     XGans = getfromCPLEX(C_XG, tableaux = False, basic = False, TablNB = False)

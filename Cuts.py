@@ -55,7 +55,7 @@ def addCuts(inMIP, N_in, cutA, cutb):
 
 
 
-def addCuts2Cplex(filename, NB, A_cut, b_cut, filenames = True, newObj = True, verbose = 0):
+def addCuts2Cplex(filename, NB, A_cut, b_cut, filenames = True, newObj = True, verbose = 0, scratch = './'):
     if filenames:
         C = cplex.Cplex()
         if verbose <= 0:
@@ -69,7 +69,7 @@ def addCuts2Cplex(filename, NB, A_cut, b_cut, filenames = True, newObj = True, v
             if orgname == '':
                 orgname = str(str(int(filename.get_time()*1000)))
             name = '___' + orgname + '___.mps'
-            filename.write(name)
+            filename.write(scratch + name)
             C = cplex.Cplex()
             if verbose <= 0:
                 C.set_log_stream(None)                                          # Don't print log on screen
@@ -101,7 +101,8 @@ def addUserCut(M,
     cutType = "GMI",
     cutDetails = dict(),
     verbose = 0,
-    returnans = False
+    returnans = False,
+    scratch = './'
     ):
     """
     Mnew, MnewG = addUserCut(M, cont, getfromCPLEX_Obj, cutType = "GMI", cutDetails = dict(), verbose = 0, returnans = False)
@@ -147,6 +148,7 @@ def addUserCut(M,
             A_cut = A_GMI,
             b_cut = b_GMI,
             filenames = False, 
+            scratch = scratch
             )
         C_cut_GMI = addCuts2Cplex(
             M, 
@@ -154,6 +156,7 @@ def addUserCut(M,
             A_cut = A_GMI,
             b_cut = b_GMI,
             filenames = False, 
+            scratch = scratch
             )
         ans = GMIrows
     if cutType == "X":
@@ -173,6 +176,7 @@ def addUserCut(M,
                     A_cut = A_GMI,
                     b_cut = b_GMI,
                     filenames = False, 
+                    scratch = scratch
                     )
                 ans = None
             else:
@@ -194,14 +198,16 @@ def addUserCut(M,
                 NB = getfromCPLEX_Obj["NonBasic"],
                 A_cut = A_X,
                 b_cut = b_X,
-                filenames = False
+                filenames = False,
+                scratch = scratch
                 )
             C_cut_GMI = addCuts2Cplex(
                 M,
                 NB = getfromCPLEX_Obj["NonBasic"],
                 A_cut = np.concatenate((A_X, A_GMI), axis = 0),
                 b_cut = np.concatenate((b_X, b_GMI), axis = 0),
-                filenames = False
+                filenames = False,
+                scratch = scratch
                 )
     if cutType == "GX":
         allGood = False
@@ -220,7 +226,8 @@ def addUserCut(M,
                     NB = N_in,
                     A_cut = A_GMI,
                     b_cut = b_GMI,
-                    filenames = False, 
+                    filenames = False,
+                    scratch = scratch 
                     )
             if nBad > np.sum(badrows):
                 if verbose > 0:
@@ -231,7 +238,8 @@ def addUserCut(M,
                     NB = N_in,
                     A_cut = A_GMI,
                     b_cut = b_GMI,
-                    filenames = False, 
+                    filenames = False,
+                    scratch = scratch 
                     )
             else:
                 nCuts = cutDetails["nCuts"]
@@ -255,14 +263,16 @@ def addUserCut(M,
                 NB = getfromCPLEX_Obj["NonBasic"],
                 A_cut = A_GX,
                 b_cut = b_GX,
-                filenames = False
+                filenames = False,
+                scratch = scratch
                 )
             C_cut_GMI = addCuts2Cplex(
                 M,
                 NB = getfromCPLEX_Obj["NonBasic"],
                 A_cut = np.concatenate((A_GX, A_GMI), axis = 0),
                 b_cut = np.concatenate((b_GX, b_GMI), axis = 0),
-                filenames = False
+                filenames = False,
+                scratch = scratch
                 )
     if returnans:
         return C_cut, C_cut_GMI, ans 
@@ -278,7 +288,8 @@ def ChooseBestCuts(  M,
     Nrounds = 5,
     withGMI = False,
     return_bestcut_param = False,
-    verbose = 0
+    verbose = 0,
+    scratch = './'
     ):
     """
     Mnew = ChooseBestCuts(  M,  cont, getfromCPLEX_Obj, cutType = "GX",  cutDetails = {'nRows':2, 'nCuts':2, 'nBad':1}, Nrounds = 5, withGMI = False, return_bestcut_param = False, verbose = 0) 
@@ -305,7 +316,8 @@ def ChooseBestCuts(  M,
     for i in np.arange(Nrounds):
         Mnew, MnewG,ans = addUserCut(M_std, cont, 
             getfromCPLEX_Obj, cutType = cutType, 
-            cutDetails = cutDetails, returnans = True,verbose = verbose-1)
+            cutDetails = cutDetails, returnans = True,
+            verbose = verbose-1, scratch = scratch)
         if withGMI:
             Mod = MnewG
         else:
