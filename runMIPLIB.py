@@ -3,7 +3,7 @@ import scipy as sp
 import scipy.sparse
 
 import scipy.sparse.linalg
-import copy
+import cplex
 
 np.set_printoptions(precision=3)
 
@@ -11,19 +11,19 @@ from Cuts import *
 from ReprVars import *
 from CPLEXInterface import *
 
-def run_compare_root(Batch = "A", Num_IP = 10, Nvar = 25, 
+def run_compare_root(Batch = "int_A", Num_IP = 10, Nvar = 25, 
                 Ncons = 10, NumRounds = 10, nRows = [2,3,5,10], 
                 nCuts = 10, path = './', verbose = 0, scratch = './'):    
     values = []
     names = []
     problem = 0
     while problem < Num_IP:
-        A = np.random.uniform(-5,6,size = (Ncons, Nvar)) 
+        A = np.random.randint(-5,5,size = (Ncons, Nvar)) 
         # Generate a non-negative vector for variable values
-        temp = np.round(60*np.random.rand(Nvar).reshape(Nvar,1))/10 
+        temp = np.ones((Nvar,1))
         # Choosing b this way ensures LP feasibility
         b = A.dot(temp)
-        f = np.random.randint(-5,10, size = (Nvar,1))  
+        f = np.arange(Nvar)-np.round(Nvar/2)  
         cont = np.random.randint(0,2, size = (Nvar,))
         M = MIP(form = 1, data = {
             'Aeq':A,
@@ -47,8 +47,51 @@ def run_compare_root(Batch = "A", Num_IP = 10, Nvar = 25,
     return values
 
 
-def run_Race_CPLEX(Batch, filename, path='./MIPLIB/'):
-    pass
+def run_Race_CPLEX(Batch, filename, path='./MIPLIB/', postfix = ".mps", scratch = "./", verbose = 0):
+    # Reading the original MIPLIB problem
+    C_org = cplex.Cplex()
+    if verbose <= 1:
+        C_org.set_log_stream(None)                                          # Don't print log on screen
+        C_org.set_results_stream(None)                                      # Don't print progress on screen    
+        C_org.set_warning_stream(None)
+    C_org.read(path+filename+postfix)
+    int_var_org = np.array([0 if i=='C' else 1 for i in C_org.variables.get_types()])
+    # Converting it into standard form     
+    C = Cplex2StdCplex(path+filename+postfix, MIP  = True, verbose = verbose-1)
+    if verbose <= 1:
+        C.set_log_stream(None)                                          # Don't print log on screen
+        C.set_results_stream(None)                                      # Don't print progress on screen    
+        C.set_warning_stream(None)
+    cont_var = np.array([1 if i=='C' else 0 for i in C.variables.get_types()])
+    int_var = 1-cont_var
+    C.write(scratch+filename+'_std'+postfix)
+    C.set_problem_type(C.problem_type.LP)     
+    # For doing rootnode computation in CPLEX as it pleases
+    ###########################################################
+    Best_by_cplex = getNumCut(scratch+filename+'_std'+postfix, filenames = True, verbose = verbose-1)
+    ###########################################################
+    if verbose > 0:
+        print("Cplex generated "+str(Best_by_cplex["cuts"])+" cuts and brought the objective to "+str(Best_by_cplex["finalLP"]))
+    # Solving the LP relaxation of the standard form and getting solve information
+    LPSolution = getfromCPLEX(C, verbose=verbose-1, ForceSolve=True, tableaux=False)
+    print(LPSolution["Objective"])
+    x_B = -LPSolution["Solution"][LPSolution["Basic"]]
+    bad_rows = intRows(x_B,int_var[LPSolution["Basic"]].astype(int))
+    if verbose > 0:
+        print("ORIGINAL PROBLEM\n******************")
+        print("nVar: "+str(C_org.variables.get_num())+ 
+        "\n nCons: "+str(C_org.linear_constraints.get_num()) +
+        "\n IntCon: "+str(np.sum(int_var_org)))
+        print("\nSTANDARD PROBLEM\n*****************")
+        print("nVar: "+str(C.variables.get_num())+ 
+        "\n nCons: "+str(C.linear_constraints.get_num()) +
+        "\n IntCon: "+ str (np.sum(int_var) ))
+        print("OTHERS\n******")
+        print("LP Objective: ", LPSolution["Objective"])
+        print("# Integer constraints not satified in LP relaxation:", np.where(bad_rows)[0].shape[0])
+    nCutMax = Best_by_cplex["cuts"]
+
+
 
 
 
@@ -94,6 +137,8 @@ def compare_root_problem(M, NumRounds, nRows = [2,3,5,10], nBad = 1, nCuts = 10,
     C_GMI_m.solve()
     names.append('GMI_m')
     values.append(C_GMI_m.solution.get_objective_value())
+    if verbose > 0:
+        print("GMIs generated")
     for row_ct in nRows:
         ############################################
         ############ REGULAR X-POLYTOPE ############
@@ -124,6 +169,8 @@ def compare_root_problem(M, NumRounds, nRows = [2,3,5,10], nBad = 1, nCuts = 10,
                 C2_XG_p.solution.get_objective_value(),
                 C_XG_p.solution.get_objective_value()
             ))
+        if verbose > 0:
+            print(str(row_ct)+" row X cuts generated for pure")        
         # Mixed integer
         # X cut
         C_X_m, best_X_m = ChooseBestCuts(C, cont, getfromCPLEX_Obj=LPS, 
@@ -150,6 +197,8 @@ def compare_root_problem(M, NumRounds, nRows = [2,3,5,10], nBad = 1, nCuts = 10,
                 C2_XG_m.solution.get_objective_value(),
                 C_XG_m.solution.get_objective_value()
             ))
+        if verbose > 0:
+            print(str(row_ct)+" row X cuts generated for mixed")        
         ############################################
         ########## GENERALIZED X-POLYTOPE ##########
         ############################################
@@ -179,6 +228,8 @@ def compare_root_problem(M, NumRounds, nRows = [2,3,5,10], nBad = 1, nCuts = 10,
                 C2_GXG_p.solution.get_objective_value(),
                 C_GXG_p.solution.get_objective_value()
             ))
+        if verbose > 0:
+            print(str(row_ct)+" row GX cuts generated for pure")        
         # Mixed integer
         # GX cut
         C_GX_m, best_GX_m = ChooseBestCuts(C, cont, getfromCPLEX_Obj=LPS, 
@@ -205,6 +256,8 @@ def compare_root_problem(M, NumRounds, nRows = [2,3,5,10], nBad = 1, nCuts = 10,
                 C2_GXG_m.solution.get_objective_value(),
                 C_GXG_m.solution.get_objective_value()
             ))
+        if verbose > 0:
+            print(str(row_ct)+" row GX cuts generated for mixed")        
     return names, values
 
 
@@ -218,13 +271,13 @@ def getNumCut(M, filenames = False, verbose = 0, solved = False):
     ans["LP"] = Final LP bound    
     """
     if filenames:
-        Model = Cplex.cplex()
+        Model = cplex.Cplex()
         Model.read(M)
     else:
         Model = M
     if verbose <= 0:
-        M.set_log_stream(None)                                          # Don't print log on screen
-        M.set_results_stream(None)                                      # Don't print progress on screen    
+        Model.set_log_stream(None)                                          # Don't print log on screen
+        Model.set_results_stream(None)                                      # Don't print progress on screen    
     if not solved:
         Model.parameters.mip.limits.nodes.set(0)
         Model.solve()
@@ -259,7 +312,7 @@ def run_MIPLIB(problems = ['enlight9'],
     nTrials: number of iterations on cut of each row length
     nCuts: number of Cuts
     n_badrow: number of "bad rows" to be pickd in each cut
-    runGX: whether or not to run GX cuts
+    runGX: whether or not to run GX ctus
     runX: Whether or not to run X cuts
   
     Returns GXGvals/GXvals, both of shape

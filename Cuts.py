@@ -137,7 +137,7 @@ def addUserCut(M,
     #     sparse = False
     (A_GMI, b_GMI) = GMI(   
             getfromCPLEX_Obj["Tableaux_NB"].todense().A,
-            -x_B,       # "-" sign because in b+\Z^n, b is the negative of the LP Basic solution
+            x_B,       
             GMIrows,
             cont[N_in.astype(int)]
             )

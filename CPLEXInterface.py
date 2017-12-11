@@ -107,9 +107,9 @@ def Cplex2StdCplex(filename, MIP = False, verbose = 0, MIPobject = False):
     else:
         M = cplex.Cplex()
         if  verbose <= 0:
-             Mod.set_log_stream(None)                                          # Don't print log on screen
-             Mod.set_results_stream(None)                                      # Don't print progress on screen    
-             Mod.set_warning_stream(None)
+             M.set_log_stream(None)                                          # Don't print log on screen
+             M.set_results_stream(None)                                      # Don't print progress on screen    
+             M.set_warning_stream(None)
         # Load file
         M.read(filename)
     # Generates the sparse, row-column-value representation of constraint matrices
