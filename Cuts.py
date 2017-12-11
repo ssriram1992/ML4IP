@@ -75,7 +75,7 @@ def addCuts2Cplex(filename, NB, A_cut, b_cut, filenames = True, newObj = True, v
                 C.set_log_stream(None)                                          # Don't print log on screen
                 C.set_results_stream(None)                                      # Don't print progress on screen    
                 C.set_warning_stream(None)
-            C.read(name)
+            C.read(scratch + name)
             C.set_problem_name(orgname)
         else:
             C = filename
@@ -284,7 +284,7 @@ def ChooseBestCuts(  M,
     cont,
     getfromCPLEX_Obj = None,
     cutType = "GX", 
-    cutDetails = {'nRows':2, 'nCuts':2, 'nBad':1},
+    cutDetails = {'nRows':2, 'nCuts':1, 'nBad':1},
     Nrounds = 5,
     withGMI = False,
     return_bestcut_param = False,

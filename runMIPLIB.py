@@ -47,49 +47,109 @@ def run_compare_root(Batch = "int_A", Num_IP = 10, Nvar = 25,
     return values
 
 
-def run_Race_CPLEX(Batch, filename, path='./MIPLIB/', postfix = ".mps", scratch = "./", verbose = 0):
-    # Reading the original MIPLIB problem
-    C_org = cplex.Cplex()
-    if verbose <= 1:
-        C_org.set_log_stream(None)                                          # Don't print log on screen
-        C_org.set_results_stream(None)                                      # Don't print progress on screen    
-        C_org.set_warning_stream(None)
-    C_org.read(path+filename+postfix)
-    int_var_org = np.array([0 if i=='C' else 1 for i in C_org.variables.get_types()])
-    # Converting it into standard form     
-    C = Cplex2StdCplex(path+filename+postfix, MIP  = True, verbose = verbose-1)
-    if verbose <= 1:
-        C.set_log_stream(None)                                          # Don't print log on screen
-        C.set_results_stream(None)                                      # Don't print progress on screen    
-        C.set_warning_stream(None)
-    cont_var = np.array([1 if i=='C' else 0 for i in C.variables.get_types()])
-    int_var = 1-cont_var
-    C.write(scratch+filename+'_std'+postfix)
-    C.set_problem_type(C.problem_type.LP)     
-    # For doing rootnode computation in CPLEX as it pleases
-    ###########################################################
-    Best_by_cplex = getNumCut(scratch+filename+'_std'+postfix, filenames = True, verbose = verbose-1)
-    ###########################################################
+def CreateRandProb(Batch, name, path, Nvar, Ncons):
+    A = np.random.randint(-5,5,size = (Ncons, Nvar)) 
+    # Generate a non-negative vector for variable values
+    temp = np.ones((Nvar,1))
+    # Choosing b this way ensures LP feasibility
+    b = A.dot(temp)
+    f = np.arange(Nvar)-np.round(Nvar/2)  
+    cont =np.random.randint(0,2, size = (Nvar,))
+    M = MIP(form = 1, data = {
+        'Aeq':A,
+        'beq':b,
+        'f':f,
+        'cont':cont
+    })    
+    C = Py2Cplex(M)
+    C.variables.set_types(
+            [(i,"I") if j else (i,"C") for (i,j) in zip(range(Nvar),cont) ]
+        )
+    C.write(path + Batch + name + ".mps")
+
+
+def run_Race_CPLEX_random(Batch = "A", NumIP = 100, Nvar = 50, Ncons =20, BestOf = 100, Roundlimit = 10, AbsRoundLim = 100, nCuts = 1, nBad = 1,nRows = 2 ,postfix = ".mps", scratch = "./", verbose = 0):
+    """
+    Runs NumIP number of simulations. Nvar/Ncons denote the problem sizes. 
+    Uses Cplex to generate a bunch of rounds of cuts in root node. Does not go to branching. The objective obtaineed  here is 
+    cplex_performance["finalLP"] and the number of cuts added by CPLEX is cplex_performance["cuts"]
+    We add at most "RoundLimits" times the number of cuts that CPLEX had added. We see how many cuts do we require to beat CPLEX's performance.
+    How do we add cuts?
+        Loop (We add 1 cut to the LP relaxation. The 1 cut is chosen as the best cut out of "BestOf" cuts generated. Then the new LP is solved.)
+    The above loop is done until we reach max allowed cuts or we beat CPLEX. Number of cuts needed to beat CPLEX is noted and returned
+    """
+    # Creating the problem
+    values = []
+    cplex_val = []
+    print("**************************************")
+    print("Number of problems to be run:", NumIP)
+    print(str(Nvar)+" variables and "+str(Ncons)+" constraints in standard form.")
+    print("Each cut chosen as best of " + str(BestOf)+ " GX cuts.")
+    print("GX cuts are "+str(nRows)+" row cuts with "+str(nBad)+" bad rows.")
+    print("**************************************")
+    print("Simulation Starting ...")
+    problem = 0
+    while (problem < NumIP):
+        f = np.arange(Nvar)-np.round(Nvar/2)
+        A = np.random.randint(-5,5,(Ncons,Nvar))
+        temp = np.ones((Nvar,1))
+        b = A.dot(temp)
+        cont = np.random.randint(0,2,(Nvar,))
+        # Creating the MIP object
+        M = MIP(form = 1, data = {
+            'Aeq':A,
+            'beq':b,
+            'f':f,
+            'cont':cont
+        })
+        name = Batch + "_" + str(problem+1)
+        M.write(name = name, path =  scratch)        
+        # Creating the object to add GX cuts:
+        C_GX = Py2Cplex(M)
+        if verbose <= 2:
+            C_GX.set_log_stream(None)                                          # Don't print log on screen
+            C_GX.set_results_stream(None)                                      # Don't print progress on screen    
+            C_GX.set_warning_stream(None)
+        C_GX.set_problem_name(name)        
+        C_GX.solve()
+        if C_GX.solution.get_status_string() != "optimal": # If LP optimal is not being obtained
+            continue
+        # Getting the solution in CPLEX
+        C = Py2Cplex(M)
+        t1 = [(i,"I") if j else (i,"C") for (i,j) in zip(range(Nvar),cont) ]
+        C.variables.set_types(t1)
+        cplex_performance = getNumCut(C, verbose = verbose - 2)
+        cplex_val.append(cplex_performance["cuts"])
+        if verbose > 1:
+            print(cplex_performance)
+        My_cont = M.cont.copy()
+        value = float("inf")
+        ActLim = min(
+                    cplex_performance["cuts"]*Roundlimit,
+                    AbsRoundLim
+                    )
+        for i in range(ActLim): 
+            C_GX = ChooseBestCuts(C_GX, My_cont, cutDetails = {'nRows':nRows, 'nCuts':nCuts, 'nBad':nBad})
+            My_cont = My_cont.tolist()
+            My_cont.append(1)
+            My_cont = np.array(My_cont)
+            C_GX.solve()
+            if verbose > 1:
+                print("Round "+str(i+1), C_GX.solution.get_objective_value())
+            if C_GX.solution.get_objective_value() >= cplex_performance["finalLP"]:
+                value = i+1
+                break
+        values.append(value)            
+        if verbose > 0:
+            print("Problem "+str(problem+1)+" completed with " + str(value) + " GX cuts to beat CPLEX, where CPLEX added " + str(cplex_performance["cuts"]) + " cuts")
+        problem = problem + 1
     if verbose > 0:
-        print("Cplex generated "+str(Best_by_cplex["cuts"])+" cuts and brought the objective to "+str(Best_by_cplex["finalLP"]))
-    # Solving the LP relaxation of the standard form and getting solve information
-    LPSolution = getfromCPLEX(C, verbose=verbose-1, ForceSolve=True, tableaux=False)
-    print(LPSolution["Objective"])
-    x_B = -LPSolution["Solution"][LPSolution["Basic"]]
-    bad_rows = intRows(x_B,int_var[LPSolution["Basic"]].astype(int))
-    if verbose > 0:
-        print("ORIGINAL PROBLEM\n******************")
-        print("nVar: "+str(C_org.variables.get_num())+ 
-        "\n nCons: "+str(C_org.linear_constraints.get_num()) +
-        "\n IntCon: "+str(np.sum(int_var_org)))
-        print("\nSTANDARD PROBLEM\n*****************")
-        print("nVar: "+str(C.variables.get_num())+ 
-        "\n nCons: "+str(C.linear_constraints.get_num()) +
-        "\n IntCon: "+ str (np.sum(int_var) ))
-        print("OTHERS\n******")
-        print("LP Objective: ", LPSolution["Objective"])
-        print("# Integer constraints not satified in LP relaxation:", np.where(bad_rows)[0].shape[0])
-    nCutMax = Best_by_cplex["cuts"]
+        print(values,cplex_val,sep = "\n")
+    return(values, cplex_val)
+
+
+    
+
 
 
 
