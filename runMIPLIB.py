@@ -322,7 +322,7 @@ def compare_root_problem(M, NumRounds, nRows = [2,3,5,10], nBad = 1, nCuts = 10,
     return names, values
 
 
-def getNumCut(M, filenames = False, verbose = 0, solved = False):
+def getNumCut(M, filenames = False, verbose = 0, solved = False, returnModel = False):
     """
     ans = getNumCut(M):
     M : A CPLEX model or filename
@@ -349,10 +349,49 @@ def getNumCut(M, filenames = False, verbose = 0, solved = False):
     ans = dict()
     ans["cuts"] = cuts
     ans["finalLP"] = Model.solution.MIP.get_best_objective()
-    return ans   
+    if returnModel:
+        return ans, Model
+    else:
+        return ans   
+
+
+def run_MIPLIB_root(problemlist,
+        rowlengths = [2,5,10], 
+        nTrials = 10, 
+        prefix = './MIPLIB/', 
+        postfix = '.mps', 
+        nCuts = 100,
+        n_badrow = [1, 5],
+        runGX = False,
+        runX = False,
+        verbose = 0,
+        scratch = './',
+        saveDict = True
+    ):
+    allFile = []
+    t2 = open(problemlist,"r")
+    t3 = t2.readlines()
+    for i in t3:
+        allFile.append(i[0:i.find('.')])
+    t2.close()
+    if verbose > 0:
+        print("File Set: ", allFile)   
+        print("nTrials: "+str(nTrials), "nCuts: "+str(nCuts), "n_badrow: "+str(n_badrow), sep = "\n")
+        print("*********************")
+        print("*****Run Started*****")
+        print("*********************")      
+    t1 = run_MIPLIB(allFiles, rowlengths, nTrials, prefix, postfix, nCuts, n_badrow, runGX, runX, verbose - 1, scratch, saveDict)
+    if verbose > 0:
+        print("**********************")
+        print("*****Run Complete*****")
+        print("**********************")
+        print(t1)
 
 
 
+
+# This is required to retrieve data from a saved dictionary, just in case 
+nan = np.nan
 
 def run_MIPLIB(problems = ['enlight9'], 
   rowlengths = [2,3], 
@@ -364,7 +403,8 @@ def run_MIPLIB(problems = ['enlight9'],
   runGX = False,
   runX = False,
   verbose = 0,
-  scratch = './'):
+  scratch = './',
+  saveDict = False):
     """
     run_MIPLIB(problems = ['enlight9'], rowlengths = [2,3], nTrials = 2, prefix = './MIPLIB/', postfix = '.mps', nCuts=100, n_badrow = 1, runGX = False, runX = False, verbose=0)
     problems = set of MIPLIB problem names to run.
@@ -372,9 +412,10 @@ def run_MIPLIB(problems = ['enlight9'],
     rowlengths: list containing number of row cuts to be iterated on
     nTrials: number of iterations on cut of each row length
     nCuts: number of Cuts
-    n_badrow: number of "bad rows" to be pickd in each cut
-    runGX: whether or not to run GX ctus
+    n_badrow: number of "bad rows" to be picked in each cut
+    runGX: whether or not to run GX cuts
     runX: Whether or not to run X cuts
+    saveDict: SHould we save a dictionary with the results?
   
     Returns GXGvals/GXvals, both of shape
     (len(problems), len(rowlengths), nTrials)
@@ -383,16 +424,12 @@ def run_MIPLIB(problems = ['enlight9'],
     Trials = range(nTrials)  
     LPvals = np.zeros((len(problems),))
     GMIvals = np.zeros((len(problems),))
-    # Initializae GXGvals and GXvals if GX cuts are run
-    if runGX:
-        GXGvals = np.zeros((len(problems), len(rowlengths), len(n_badrow), len(Trials)))
-        GXvals = np.zeros((len(problems), len(rowlengths), len(n_badrow), len(Trials)))
-    # Initializae XGvals and Xvals if X cuts are run
-    if runX:
-        XGvals = np.zeros((len(problems), len(rowlengths), len(Trials)))
-        Xvals = np.zeros((len(problems), len(rowlengths), len(Trials)))
-    # Do this for each problem in under consderation
+    AllCutSol = dict()    
+    # Do this for each problem in under consideration
     for filename in problems:    
+        if verbose > 0:
+            print("Running: "+str(filename))
+        cutValues = dict()
         # Reading the original MIPLIB problem
         C_org = cplex.Cplex()
         C_org.read(prefix+filename+postfix)
@@ -405,25 +442,28 @@ def run_MIPLIB(problems = ['enlight9'],
         C.write(prefix+filename+'_std'+postfix)
         # Solving the LP relaxation of the standard form and getting solve information
         LPSolution = getfromCPLEX(C, verbose=verbose-1, ForceSolve=True, tableaux=False)
-        print(LPSolution["Objective"])
         x_B = -LPSolution["Solution"][LPSolution["Basic"]]
         bad_rows = intRows(x_B,int_var[LPSolution["Basic"]].astype(int))
-        print("ORIGINAL PROBLEM\n******************")
-        print("nVar: "+str(C_org.variables.get_num())+ 
-        "\n nCons: "+str(C_org.linear_constraints.get_num()) +
-        "\n IntCon: "+str(np.sum(int_var_org)))
-        print("\nSTANDARD PROBLEM\n*****************")
-        print("nVar: "+str(C.variables.get_num())+ 
-        "\n nCons: "+str(C.linear_constraints.get_num()) +
-        "\n IntCon: "+ str (np.sum(int_var) ))
-        print("OTHERS\n******")
-        print("LP Objective: ", LPSolution["Objective"])
-        print("# Integer constraints not satified in LP relaxation:", np.where(bad_rows)[0].shape[0])
+        if verbose > 1:
+            print(LPSolution["Objective"])
+            print("ORIGINAL PROBLEM\n******************")
+            print("nVar: "+str(C_org.variables.get_num())+ 
+                "\n nCons: "+str(C_org.linear_constraints.get_num()) +
+                "\n IntCon: "+str(np.sum(int_var_org)))
+            print("\nSTANDARD PROBLEM\n*****************")
+            print("nVar: "+str(C.variables.get_num())+ 
+                "\n nCons: "+str(C.linear_constraints.get_num()) +
+                "\n IntCon: "+ str (np.sum(int_var) ))
+            print("OTHERS\n******")
+            print("LP Objective: ", LPSolution["Objective"])
+            print("# Integer constraints not satified in LP relaxation:", np.where(bad_rows)[0].shape[0])
+        cutValues["LP"] = LPSolution["Objective"]
+        cutValues["badrow"] = np.where(bad_rows)[0].shape[0]
         # Dealing with LP relaxation complete
         # Adding GMI cuts
         (A_GMI, b_GMI) = GMI(
                             LPSolution["Tableaux_NB"].todense().A, 
-                            -LPSolution["Sol_Basic"], 
+                            LPSolution["Sol_Basic"], 
                             bad_rows, 
                             cont_var[LPSolution["NonBasic"]].astype(int)
                             )
@@ -432,11 +472,21 @@ def run_MIPLIB(problems = ['enlight9'],
                             A_cut = A_GMI,
                             b_cut = b_GMI, scratch = scratch)
         GMIans = getfromCPLEX(C_GMI, tableaux = False, basic = False, TablNB = False)
-        print('GMI:', GMIans["Objective"])
+        if verbose > 1:
+            print('GMI:', GMIans["Objective"])
+        cutValues["GMI"] = GMIans["Objective"]
         # GMI complete
         # Adding Crosspolytope based cuts
         # Looping among all rowlengths required
         for nRows in rowlengths:
+            # Initialize GXGvals and GXvals if GX cuts are run            
+            if runGX:
+                GXGvals = np.zeros((len(n_badrow), len(Trials)))
+                GXvals = np.zeros((len(n_badrow), len(Trials)))
+            # Initialize XGvals and Xvals if X cuts are run
+            if runX:
+                XGvals = np.zeros((len(Trials),))
+                Xvals = np.zeros((len(Trials),))
             # Looping over number of trials needed
             for Trial in Trials:
                 # If GX cuts have to be done, then the following
@@ -444,70 +494,93 @@ def run_MIPLIB(problems = ['enlight9'],
                     # In GX cuts, there is an option of choosing number of bad rows. Looping over all reqd values
                     for badrow_ct in n_badrow:
                         ans = Rows4Xcut(x_B, nRows, nCuts, int_var[LPSolution["Basic"]], badrow_ct)
-                        # Calculating GX cuts
-                        (A_GX, b_GX) = GXLift(LPSolution["Tableaux_NB"], 
-                                            -LPSolution["Sol_Basic"],
-                                            ans["RowMat"],
-                                            ans["muMat"],
-                                            ans["fMat"],
-                                            cont_var[LPSolution["NonBasic"]].astype(int),
-                                            sparse = True,
-                                            verbose = verbose-1
-                                            )
-                        # creating GX model
-                        C_GX = addCuts2Cplex(filename = prefix+filename+'_std'+postfix,
-                                            NB = LPSolution["NonBasic"],
-                                            A_cut = A_GX,
-                                            b_cut = b_GX, scratch = scratch)
-                        # creating GXG model
-                        C_GXG = addCuts2Cplex(filename = prefix+filename+'_std'+postfix,
-                                            NB = LPSolution["NonBasic"],
-                                            A_cut = np.concatenate((A_GX , A_GMI),axis=0),
-                                            b_cut = np.concatenate((b_GX,  b_GMI),axis=0), scratch = scratch)
-                        # Solving the models with cuts
-                        GXans = getfromCPLEX(C_GX, tableaux = False, basic = False, TablNB = False)
-                        GXGans = getfromCPLEX(C_GXG, tableaux = False, basic = False, TablNB = False)
-                        # Printing and storing the results
-                        print(nRows,'row cut GX in Problem: ', filename, 'with badrow count: ', badrow_ct, '. Improvement: ', GXans["Objective"], GXGans["Objective"],sep = " ")
-                        GXvals[problems.index(filename), rowlengths.index(nRows), n_badrow.index(badrow_ct), Trial] = GXans["Objective"]
-                        GXGvals[problems.index(filename), rowlengths.index(nRows), n_badrow.index(badrow_ct), Trial] = GXGans["Objective"]
+                        if ans is None: # Problem occurred in X cut parameter generation. This can happen if there are insufficient badrows
+                            print(nRows,'row GX cut in Problem: ', filename, "not possible", sep = " ")
+                            GXvals[n_badrow.index(badrow_ct), Trial] = None
+                            GXGvals[n_badrow.index(badrow_ct), Trial] = None
+                        else:
+                            # Calculating GX cuts
+                            (A_GX, b_GX) = GXLift(LPSolution["Tableaux_NB"], 
+                                                -LPSolution["Sol_Basic"],
+                                                ans["RowMat"],
+                                                ans["muMat"],
+                                                ans["fMat"],
+                                                cont_var[LPSolution["NonBasic"]].astype(int),
+                                                sparse = True,
+                                                verbose = verbose-1
+                                                )
+                            # creating GX model
+                            C_GX = addCuts2Cplex(filename = prefix+filename+'_std'+postfix,
+                                                NB = LPSolution["NonBasic"],
+                                                A_cut = A_GX,
+                                                b_cut = b_GX, scratch = scratch)
+                            # creating GXG model
+                            C_GXG = addCuts2Cplex(filename = prefix+filename+'_std'+postfix,
+                                                NB = LPSolution["NonBasic"],
+                                                A_cut = np.concatenate((A_GX , A_GMI),axis=0),
+                                                b_cut = np.concatenate((b_GX,  b_GMI),axis=0), scratch = scratch)
+                            # Solving the models with cuts
+                            GXans = getfromCPLEX(C_GX, tableaux = False, basic = False, TablNB = False)
+                            GXGans = getfromCPLEX(C_GXG, tableaux = False, basic = False, TablNB = False)
+                            # Printing and storing the results
+                            if verbose > 1:
+                                print(nRows,'row cut GX in Problem: ', filename, 'with badrow count: ', badrow_ct, '. Improvement: ', GXans["Objective"], GXGans["Objective"],sep = " ")
+                            GXvals[n_badrow.index(badrow_ct), Trial] = GXans["Objective"]
+                            GXGvals[n_badrow.index(badrow_ct), Trial] = GXGans["Objective"]
                 # If X cuts have to be run
                 if runX:
                     # Note that there is no looping over number of badrow selection. Number of badrow = number of rows here, necessarily.
                     ans = Rows4Xcut(x_B, nRows, nCuts, int_var[LPSolution["Basic"]], nRows)
-                    # Calculating the X cuts
-                    (A_X, b_X) = XLift(LPSolution["Tableaux_NB"], 
-                                        -LPSolution["Sol_Basic"],
-                                        ans["RowMat"],
-                                        ans["muMat"],
-                                        cont_var[LPSolution["NonBasic"]].astype(int),
-                                        sparse = True,
-                                        verbose = verbose-1
-                                        )
-                    # Creating the X model
-                    C_X = addCuts2Cplex(filename = prefix+filename+'_std'+postfix,
-                                    NB = LPSolution["NonBasic"],
-                                    A_cut = A_X,
-                                    b_cut = b_X, scratch = scratch)
-                    # Creating the XG model
-                    C_XG = addCuts2Cplex(filename = prefix+filename+'_std'+postfix,
+                    if ans is None: # Problem occurred in X cut parameter generation. This can happen if there are insufficient badrows
+                        print(nRows,'row X cut in Problem: ', filename, "not possible", sep = " ")
+                        Xvals[Trial] = None
+                        XGvals[Trial] = None
+                    else:
+                        # Calculating the X cuts
+                        (A_X, b_X) = XLift(LPSolution["Tableaux_NB"], 
+                                            -LPSolution["Sol_Basic"],
+                                            ans["RowMat"],
+                                            ans["muMat"],
+                                            cont_var[LPSolution["NonBasic"]].astype(int),
+                                            sparse = True,
+                                            verbose = verbose-1
+                                            )
+                        # Creating the X model
+                        C_X = addCuts2Cplex(filename = prefix+filename+'_std'+postfix,
                                         NB = LPSolution["NonBasic"],
-                                        A_cut = np.concatenate((A_X , A_GMI),axis=0),
-                                        b_cut = np.concatenate((b_X,  b_GMI),axis=0), scratch = scratch)
-                    # Solving the models with cuts
-                    Xans = getfromCPLEX(C_X, tableaux = False, basic = False, TablNB = False)
-                    XGans = getfromCPLEX(C_XG, tableaux = False, basic = False, TablNB = False)
-                    # Printing and storing the results
-                    print(nRows,'row X cut in Problem: ', filename, Xans["Objective"], XGans["Objective"],sep = " ")
-                    Xvals[problems.index(filename), rowlengths.index(nRows), Trial] = Xans["Objective"]
-                    XGvals[problems.index(filename), rowlengths.index(nRows), Trial] = XGans["Objective"]
+                                        A_cut = A_X,
+                                        b_cut = b_X, scratch = scratch)
+                        # Creating the XG model
+                        C_XG = addCuts2Cplex(filename = prefix+filename+'_std'+postfix,
+                                            NB = LPSolution["NonBasic"],
+                                            A_cut = np.concatenate((A_X , A_GMI),axis=0),
+                                            b_cut = np.concatenate((b_X,  b_GMI),axis=0), scratch = scratch)
+                        # Solving the models with cuts
+                        Xans = getfromCPLEX(C_X, tableaux = False, basic = False, TablNB = False)
+                        XGans = getfromCPLEX(C_XG, tableaux = False, basic = False, TablNB = False)
+                        # Printing and storing the results
+                        if verbose > 1:
+                            print(nRows,'row X cut in Problem: ', filename, Xans["Objective"], XGans["Objective"],sep = " ")
+                        Xvals[Trial] = Xans["Objective"]
+                        XGvals[Trial] = XGans["Objective"]
+            if runGX or runX:
+                cutValues[str(nRows)] = dict()
+            if runGX:                
+                cutValues[str(nRows)]["GX"] = GXvals.tolist()
+                cutValues[str(nRows)]["GXG"] = GXGvals.tolist()
+            if runX:
+                cutValues[str(nRows)]["X"] = Xvals.tolist()
+                cutValues[str(nRows)]["XG"] = XGvals.tolist()
+        AllCutSol[filename] = cutValues
+        if verbose > 0:
+            print(AllCutSol)
     # Returning appropriately based on inputs.
-    if runX and runGX:
-        return GXvals, GXGvals, Xvals, XGvals
-    if runX:
-        return Xvals, XGvals
-    if runGX:
-        return GXvals, GXGvals
+    if runX or runGX:
+        if saveDict:
+            myFile = open( scratch +str(len(problems))+"_prob_"+str(nCuts)+"_cuts_"+str(nTrials)+"_trials_"+str(int(C.get_time()*1000)) + ".txt" , "w")
+            myFile.write(str(AllCutSol))
+            myFile.close()
+        return AllCutSol
     else:
         return GMIans
 
