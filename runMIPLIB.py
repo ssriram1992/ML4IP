@@ -380,7 +380,7 @@ def run_MIPLIB_root(problemlist,
         print("*********************")
         print("*****Run Started*****")
         print("*********************")      
-    t1 = run_MIPLIB(allFiles, rowlengths, nTrials, prefix, postfix, nCuts, n_badrow, runGX, runX, verbose - 1, scratch, saveDict)
+    t1 = run_MIPLIB(allFile, rowlengths, nTrials, prefix, postfix, nCuts, n_badrow, runGX, runX, verbose - 1, scratch, saveDict)
     if verbose > 0:
         print("**********************")
         print("*****Run Complete*****")
