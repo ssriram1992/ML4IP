@@ -141,7 +141,8 @@ def run_Race_CPLEX_random(Batch = "A", NumIP = 100, Nvar = 50, Ncons =20, BestOf
                 break
         values.append(value)            
         if verbose > 0:
-            print("Problem "+str(problem+1)+" completed with " + str(value) + " GX cuts to beat CPLEX, where CPLEX added " + str(cplex_performance["cuts"]) + " cuts")
+            # print("Problem "+str(problem+1)+" completed with " + str(value) + " GX cuts to beat CPLEX, where CPLEX added " + str(cplex_performance["cuts"]) + " cuts")
+            print(str(problem+1)+" " + str(value) + " " + str(cplex_performance["cuts"]))
         problem = problem + 1
     if verbose > 0:
         print(values,cplex_val,sep = "\n")
