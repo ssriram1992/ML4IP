@@ -190,11 +190,12 @@ def Cplex2StdCplex(filename, MIP = False, verbose = 0, MIPobject = False):
             ineq = ineq+1
         # If lb is negative, then variable has to be written as difference between two non-negative variable
         if lb[i] < 0:
-            Arowind.append(ineq)
-            Acolind.append(i)
-            Aval.append(-1.0)
-            ineq = ineq+1
-            b.append(-lb[i])
+            if -lb[i] < cplex.infinity:
+                Arowind.append(ineq)
+                Acolind.append(i)
+                Aval.append(-1.0)
+                ineq = ineq+1
+                b.append(-lb[i])
             # repeating the previous occurences in ineq matrix
             t1 = np.array(Arowind)
             t2 = np.array(Acolind)
@@ -430,8 +431,8 @@ def getfromCPLEX(M,
             tTablNB = sp.sparse.linalg.spsolve(B, N)
             # The basic solution is B^{-1}b. So we are solving the linear system B*x_B = b
             x_B = sp.sparse.linalg.spsolve(B, b[usefulRows])
-            Sol["Tableaux_NB"] = tTablNB
-            Sol["Sol_Basic"] = x_B
+            Sol["Tableaux_NB"] = np.around(tTablNB, precission)
+            Sol["Sol_Basic"] = np.around(x_B, precission)
             Sol["B"] = B
             Sol["N"] = N
             Sol["b"] = b[usefulRows]

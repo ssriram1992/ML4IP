@@ -415,8 +415,7 @@ def run_MIPLIB(problems = ['enlight9'],
     n_badrow: number of "bad rows" to be picked in each cut
     runGX: whether or not to run GX cuts
     runX: Whether or not to run X cuts
-    saveDict: SHould we save a dictionary with the results?
-  
+    saveDict: SHould we save a dictionary with the results?  
     Returns GXGvals/GXvals, both of shape
     (len(problems), len(rowlengths), nTrials)
     containing the objective value obtained in each.
@@ -565,21 +564,21 @@ def run_MIPLIB(problems = ['enlight9'],
                         XGvals[Trial] = XGans["Objective"]
             if runGX or runX:
                 cutValues[str(nRows)] = dict()
-            if runGX:                
+            if runGX:
                 cutValues[str(nRows)]["GX"] = GXvals.tolist()
                 cutValues[str(nRows)]["GXG"] = GXGvals.tolist()
             if runX:
                 cutValues[str(nRows)]["X"] = Xvals.tolist()
                 cutValues[str(nRows)]["XG"] = XGvals.tolist()
+        if saveDict:
+            myFile = open( scratch + filename + "_prob_" + str(nCuts) + "_cuts_" + str(nTrials) + "_trials.txt" , "w")
+            myFile.write(str(cutValues))
+            myFile.close()
         AllCutSol[filename] = cutValues
         if verbose > 0:
             print(AllCutSol)
     # Returning appropriately based on inputs.
     if runX or runGX:
-        if saveDict:
-            myFile = open( scratch +str(len(problems))+"_prob_"+str(nCuts)+"_cuts_"+str(nTrials)+"_trials_"+str(int(C.get_time()*1000)) + ".txt" , "w")
-            myFile.write(str(AllCutSol))
-            myFile.close()
         return AllCutSol
     else:
         return GMIans
