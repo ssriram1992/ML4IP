@@ -434,13 +434,13 @@ def run_MIPLIB(problems = ['enlight9'],
         C_org.read(prefix+filename+postfix)
         int_var_org = np.array([0 if i=='C' else 1 for i in C_org.variables.get_types()])
         # Converting it into standard form
-        C = Cplex2StdCplex(prefix+filename+postfix, MIP  = True, verbose = verbose-1)
+        C = Cplex2StdCplex(prefix+filename+postfix, MIP  = True, verbose = verbose-2)
         cont_var = np.array([1 if i=='C' else 0 for i in C.variables.get_types()])
         int_var = 1-cont_var
         C.set_problem_type(C.problem_type.LP)
         C.write(prefix+filename+'_std'+postfix)
         # Solving the LP relaxation of the standard form and getting solve information
-        LPSolution = getfromCPLEX(C, verbose=verbose-1, ForceSolve=True, tableaux=False)
+        LPSolution = getfromCPLEX(C, verbose=verbose-2, ForceSolve=True, tableaux=False)
         x_B = -LPSolution["Solution"][LPSolution["Basic"]]
         bad_rows = intRows(x_B,int_var[LPSolution["Basic"]].astype(int))
         if verbose > 1:
@@ -478,6 +478,8 @@ def run_MIPLIB(problems = ['enlight9'],
         # Adding Crosspolytope based cuts
         # Looping among all rowlengths required
         for nRows in rowlengths:
+            if verbose > 0.5:
+                print("***" + str(nRows)+" row cuts Started ***")
             # Initialize GXGvals and GXvals if GX cuts are run            
             if runGX:
                 GXGvals = np.zeros((len(n_badrow), len(Trials)))
@@ -499,14 +501,14 @@ def run_MIPLIB(problems = ['enlight9'],
                             GXGvals[n_badrow.index(badrow_ct), Trial] = None
                         else:
                             # Calculating GX cuts
-                            (A_GX, b_GX) = GXLift(LPSolution["Tableaux_NB"], 
+                            (A_GX, b_GX) = GXLift(-LPSolution["Tableaux_NB"], 
                                                 -LPSolution["Sol_Basic"],
                                                 ans["RowMat"],
                                                 ans["muMat"],
                                                 ans["fMat"],
                                                 cont_var[LPSolution["NonBasic"]].astype(int),
                                                 sparse = True,
-                                                verbose = verbose-1
+                                                verbose = verbose-2
                                                 )
                             # creating GX model
                             C_GX = addCuts2Cplex(filename = prefix+filename+'_std'+postfix,
@@ -536,13 +538,13 @@ def run_MIPLIB(problems = ['enlight9'],
                         XGvals[Trial] = None
                     else:
                         # Calculating the X cuts
-                        (A_X, b_X) = XLift(LPSolution["Tableaux_NB"], 
+                        (A_X, b_X) = XLift(-LPSolution["Tableaux_NB"], 
                                             -LPSolution["Sol_Basic"],
                                             ans["RowMat"],
                                             ans["muMat"],
                                             cont_var[LPSolution["NonBasic"]].astype(int),
                                             sparse = True,
-                                            verbose = verbose-1
+                                            verbose = verbose-2
                                             )
                         # Creating the X model
                         C_X = addCuts2Cplex(filename = prefix+filename+'_std'+postfix,
