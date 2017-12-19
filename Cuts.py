@@ -185,7 +185,7 @@ def addUserCut(M,
                allGood = True
         if allGood:
             (A_X, b_X) = XLift(
-                getfromCPLEX_Obj["Tableaux_NB"], 
+                -getfromCPLEX_Obj["Tableaux_NB"], 
                 -x_B,
                 ans["RowMat"],
                 ans["muMat"],
@@ -249,7 +249,7 @@ def addUserCut(M,
             if verbose > 0:
                 print(ans)
             (A_GX, b_GX) = GXLift(
-                getfromCPLEX_Obj["Tableaux_NB"], 
+                -getfromCPLEX_Obj["Tableaux_NB"], 
                 -x_B,
                 ans["RowMat"],
                 ans["muMat"],
