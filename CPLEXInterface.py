@@ -387,9 +387,9 @@ def getfromCPLEX(M,
             b1 = np.where(h1>=0)[0]
             b2 = np.where(h1<0)[0]
             B_in = np.sort(h1[b1]).copy()
-            N_in = np.array(list(set(range(nVar))-set(B_in))) # Non basic is 1:nVar \setminus tBasic
+            N_in = np.sort(np.array(list(set(range(nVar))-set(B_in)))) # Non basic is 1:nVar \setminus tBasic
             redundantRow = -h1[b2].copy()-1
-            usefulRows = np.array(list(set(range(nCon))-set(redundantRow))) # All rows \setminus redundant rows
+            usefulRows = np.sort(np.array(list(set(range(nCon))-set(redundantRow)))) # All rows \setminus redundant rows
             if verbose > 0:
                 print('Redundant rows: ',redundantRow)
         # Basic variables
@@ -422,7 +422,7 @@ def getfromCPLEX(M,
                     t2 = np.array(row.val)
                     data = np.concatenate((data, t2))
             # Creating the sparse matrix
-            Aeq = sp.sparse.csc_matrix((data, (row_ind, col_ind)))
+            Aeq = sp.sparse.csc_matrix((data, (row_ind, col_ind)), shape = (nCon, nVar))
             # Basic matrix
             B = Aeq[:, B_in]
             # Non basic matrix
