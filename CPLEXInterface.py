@@ -422,7 +422,7 @@ def getfromCPLEX(M,
                     t2 = np.array(row.val)
                     data = np.concatenate((data, t2))
             # Creating the sparse matrix
-            Aeq = sp.sparse.csc_matrix((data, (row_ind, col_ind)), shape = (nCon, nVar))
+            Aeq = sp.sparse.csc_matrix((data, (row_ind, col_ind)), shape = (nCon - redundantRow.size, nVar))
             # Basic matrix
             B = Aeq[:, B_in]
             # Non basic matrix

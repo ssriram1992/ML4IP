@@ -1,6 +1,8 @@
 # Working files
 __*
 *.csv
+*.ipynb
+*.do*
 # Editor files
 *.swp
 *.sublime*
