@@ -441,7 +441,7 @@ def run_MIPLIB(problems = ['enlight9'],
         C.write(prefix+filename+'_std'+postfix)
         # Solving the LP relaxation of the standard form and getting solve information
         LPSolution = getfromCPLEX(C, verbose=verbose-2, ForceSolve=True, tableaux=False)
-        x_B = -LPSolution["Solution"][LPSolution["Basic"]]
+        x_B = -LPSolution["Sol_Basic"]
         bad_rows = intRows(x_B,int_var[LPSolution["Basic"]].astype(int))
         if verbose > 1:
             print(LPSolution["Objective"])
