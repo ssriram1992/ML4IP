@@ -18,8 +18,8 @@ def run_compare_root(Batch = "int_A", Num_IP = 10, Nvar = 25,
     names = []
     problem = 0
     while problem < Num_IP:
-        # A = np.random.randint(-5,5,size = (Ncons, Nvar)) 
-        A = np.random.uniform(-5,6,size = (Ncons, Nvar))
+        A = np.random.randint(-5,5,size = (Ncons, Nvar)) 
+        # A = np.random.uniform(-5,6,size = (Ncons, Nvar))
         # Generate a non-negative vector for variable values
         temp = np.ones((Nvar,1))
         # Choosing b this way ensures LP feasibility
