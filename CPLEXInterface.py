@@ -27,6 +27,8 @@ def Py2Cplex(Prob):
     LHS =  [[range(nVar), Prob.Aeq[i,:].squeeze().tolist()] for i in range(nCons)]
     # Adding the constraints
     M.linear_constraints.add(lin_expr = LHS, senses='E'*nCons, rhs=Prob.beq.squeeze().tolist())
+    if Prob.name != '':
+        M.set_problem_name(Prob)
     return M
 
 def File2Py(filename):

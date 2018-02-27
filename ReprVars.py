@@ -1,6 +1,6 @@
 import numpy as np
 import scipy as sp
-
+from CPLEXInterface import *
 
 # Making changes in Sri branch
 class MIP:
@@ -11,6 +11,59 @@ class MIP:
     Aeq x = beq
     x >= 0
     x \in \Z for x\ not\in cont
+
+    Flags:
+    # These are binary falgs which are switched when a computation heavy operation is done
+    # so that the operation need not be repeated unnecessarily.
+    # Do not alter them if unsure.
+    CplexMade
+        True if corresponding CPLEX Object is made
+    LPSolved
+    GraphDrawn
+    TableGraphDrawn
+
+    Other objects saved:
+    MIP.CplexObjectLP
+        Created after MakeCplex function. The Cplex Object which stores the same MIP
+    MIP.LPInfo
+        Created after LPSolve function. Stores
+            LPSolution vector
+            LPSolution Objective
+            LPSolution simplex tableau
+            LPSolution basic variable set and non Basic variable set
+            LPSolution NonBasic Tableaux
+
+    Methods of use:
+    MIP.write(name, path="./")
+        Writes 4 csv files in the given path with the name prefix given, saving Aeq, beq, obj and cont
+    MIP.MakeCplex()
+        Makes a Cplex object of LP relaxation of the given MIP instance and saves it.
+    MIP.SolveLP()
+        Solve the LP relaxation of the problem and create the LPInfo object
+
+    Features implemented:
+    MIP.size()
+        Returns a dictionary with {'nVar', 'nCons', 'nInt'} containing number of variables,
+        constraints and number of integer variables respectively.
+    MIP.VCGraph(tol = 1e-9)
+        Returns a dictionary with {'VCG_V_mean, 'VCG_V_std', 'VCG_V_min', 'VCG_V_max', 'VCG_V_25p', 'VCG_V_75p',
+                                   'VCG_C_mean, 'VCG_C_std', 'VCG_C_min', 'VCG_C_max', 'VCG_C_max', 'VCG_C_25p'}
+        VCG referes to variable constraint graph
+        _V_ refers to variable node statistics
+        _C_ refers to constraint node statistics
+    MIP.LPObjVal()
+        Returns LP objective value
+    MIP.LPIntegerSlack()
+        Returns a dictionary with {'Slack_1_mean', 'Slack_1_std', 'Slack_1_min', 'Slack_1_max', 'Slack_1_25p', 'Slack_1_75p', 'Slack_1_norm',
+                                   'Slack_2_mean', 'Slack_2_std', 'Slack_2_min', 'Slack_2_max', 'Slack_2_25p', 'Slack_2_75p', 'Slack_2_norm',
+                                   "Slack_1_nonzero"}
+        Integer slack vectors are calculated as follows
+        Integer slack vector 1 is a vector of size equal to the number of integer variables in the problem
+        For each integer variable x_i, this contains the number x_i - np.floor(x_i).
+        Integer slack vector 2 is a vector of size equal to the number of variables in the problem
+        If x_i is a continuous variable, then the i-th coordinate of this vector is 0
+        else the i-th coordinate is  x_i - np.floor(x_i)
+
     """
     def __init__(self, form = 0, data = dict(),filenames = False, delimiter = ','):
         """
@@ -18,12 +71,17 @@ class MIP:
                       = 1 implies intialilzation in standard form. (f, Aeq, beq, cont are given. All x >=0 taken automatically)
                       = 2 implies explicit definition of inequalities, equalities, lower bounds, upper bounds, integrality constraints
         data        : Dictionary containing everything that is required to initialize
-        filenames   : Whether the values in the data dictionary are filenames or variable names. 
+        filenames   : Whether the values in the data dictionary are filenames or variable names.
         delimiter   : If values are read from a csvfile, what is the delimiter character?
         """
+        self.CplexMade = False                    # Boolean to store if Cplex object is made
         self.LPSolved = False                     # Boolean to store if LP relaxation is solved
         self.GraphDrawn = False                   # Boolean to store if the Variable Constraint Graph is drawn
         self.TableGraphDrawn = False              # Boolean to store if the Variable Constraint Graph is drawn for simplex tableaux
+        if 'name' in data:                        # If the problem has to be named
+            self.name = data["name"]
+        else:
+            self.name = ""
         if form == 0:
             # Blank initialization
             self.f = np.array([[]]).reshape((0,1)) # Minimization objjective
@@ -169,32 +227,41 @@ class MIP:
             # Ensure b in standard form is non-negative
             negb = np.where(self.beq<0)[0] # Collect those rows and invert sign of those rows
             self.Aeq[negb,:] = -self.Aeq[negb,:]
-            self.beq[negb,:] = -self.beq[negb,:]           
+            self.beq[negb,:] = -self.beq[negb,:]
         # End of function
+    #######################
+    # General purpose functions
     def write(self, name, path ='./'):
         np.savetxt(path + name + '_Aeq.csv', self.Aeq, delimiter = ',')
         np.savetxt(path + name + '_beq.csv', self.beq, delimiter = ',')
         np.savetxt(path + name + '_obj.csv', self.f, delimiter = ',')
         np.savetxt(path + name + '_cont.csv', self.cont, delimiter = ',')
-    def size(self):
+    def MakeCplex(self):
         """
-        Returns the number of variables, number of constraints and number of integer
-        variables in the IP
+        Makes a Cplex object of the given MIP instance and saves it as MIP.CplexObjectLP
         """
-        nVar = np.size(self.f)
-        nCons = np.size(self.beq)
-        nInt = nVar - np.sum(self.cont)
-        return {'nVar':nVar, 'nCons':nCons, 'nInt':nInt}
-    def createTableaux():
+        if not self.CplexMade:
+            C = Py2Cplex(self)
+            self.CplexObjectLP = C
+            self.CplexMade = True
+    def LPSolve(self):
         """
-        Function, that uses the
-        information in f, Aeq, beq and solves the LP relaxation of the problem.
+        Function, that uses the information in f, Aeq, beq and solves the LP relaxation of the problem.
         The function should return LP solution vector, LP objective value,
         and the set of optimal Basic Variables/Non-basic variables (so that we
         can calculate the tableaux externally). Optionally, the tableaux can be
         directly returned from this function.
         """
-        pass # TODO
+        if not self.LPSolved: # If LP is already solved - then nothing to do! Don't repeat the operation again!
+            self.MakeCplex() # Make the CPLEX Object!
+            self.LPInfo = getfromCPLEX(self.CplexObjectLP,
+                                            solution = True,
+                                            objective = True,
+                                            tableaux = True,
+                                            basic = True,
+                                            TablNB = True,
+                                            precission = 13
+                                        )
     def drawVarConstGraph(self, forTableaux = 0):
         """
         Draws the variable constraint Graph either for the original problem.
@@ -204,6 +271,95 @@ class MIP:
             pass #TODO
         else:
             VCG = VarConstGraph(self.Aeq != 0)
+    # End of general methods
+    #######################
+    # Feature extraction
+    def size(self):
+        """
+        Returns the number of variables, number of constraints and number of integer
+        variables in the IP
+        """
+        nVar = np.size(self.f)
+        nCons = np.size(self.beq)
+        nInt = nVar - np.sum(self.cont)
+        return {'nVar':nVar, 'nCons':nCons, 'nInt':nInt}
+    def VCGraph(self, tol = 1e-9):
+        """
+        Returns statistics of the variable constraint graph.
+        Variable constraint graph is a bipartite graph with the set of variables as one independent set and
+        the set of constraints as another independednt set. An edge between a variable and constraint is
+        said to exist if and only if the said variable appears in the said constraint with non-zero
+        coefficient (theoretically). In this implementation any number with absolute value less than tol
+        is considered as zero.
+        This function returns a dictionary with some statistics on the graph.
+        """
+        VCG = (abs(self.Aeq) < tol)*1 # Binary Matrix of same dimension as Aeq.
+        Variable_Node_vec = np.sum(VCG, axis = 0)   # Node degree of each variable node
+        Constraint_Node_vec = np.sum(VCG, axis = 1) # Node degree of each constraint node
+        return {
+            'VCG_V_mean':   np.mean(Variable_Node_vec),              # Mean degree of variable node
+            'VCG_V_std' :   np.std(Variable_Node_vec),               # Std. dev of degree of variable node
+            'VCG_V_min' :   np.min(Variable_Node_vec),               # Min degree of a variable node
+            'VCG_V_max' :   np.max(Variable_Node_vec),               # Max degree of a variable node
+            'VCG_V_25p' :   np.percentile(Variable_Node_vec, 25),    # 25th percentile degree of a variable node
+            'VCG_V_75p' :   np.percentile(Variable_Node_vec, 75),    # 75th percentile degree of a variable node
+            'VCG_C_mean':   np.mean(Constraint_Node_vec),            # Mean degree of constraint node
+            'VCG_C_std' :   np.std(Constraint_Node_vec),             # Std. dev of degree of constraint node
+            'VCG_C_min' :   np.min(Constraint_Node_vec),             # Min degree of a constraint node
+            'VCG_C_max' :   np.max(Constraint_Node_vec),             # Max degree of a constraint node
+            'VCG_C_25p' :   np.percentile(Constraint_Node_vec, 25),  # 25th percentile degree of a constraint node
+            'VCG_C_75p' :   np.percentile(Constraint_Node_vec, 75)   # 75th percentile degree of a constraint node
+        }
+    def LPObjVal(self):
+        """
+        Returns the objective Value of LP relaxation
+        """
+        self.LPSolve()
+        return LPInfo["Objective"]
+    def LPIntegerSlack(self, tol = 1e-9):
+        """
+        Returns statistics of the integer slack vector 1 and integer slack vector 2
+        Integer slack vectors are calculated as follows
+        Integer slack vector 1 is a vector of size equal to the number of integer variables in the problem
+        For each integer variable x_i, this contains the number x_i - np.floor(x_i).
+        Integer slack vector 2 is a vector of size equal to the number of variables in the problem
+        If x_i is a continuous variable, then the i-th coordinate of this vector is 0
+        else the i-th coordinate is  x_i - np.floor(x_i)
+        """
+        self.LPSolve()
+        LPSol = LPInfo["Solution"].squeeze()
+        slack2 = (LPSol - np.floor(LPSol))*(1-self.cont)
+        slack1 = slack2[cont==0]
+        return {
+            'Slack_1_mean'   :   np.mean(slack1),
+            'Slack_1_std'    :   np.std(slack1),
+            'Slack_1_min'    :   np.min(slack1),
+            'Slack_1_max'    :   np.max(slack1),
+            'Slack_1_25p'    :   np.percentile(slack1, 25),
+            'Slack_1_75p'    :   np.percentile(slack1, 75),
+            'Slack_1_norm'    :   np.linalg.norm(slack1),
+            'Slack_2_mean'   :   np.mean(slack2),
+            'Slack_2_std'    :   np.std(slack2),
+            'Slack_2_min'    :   np.min(slack2),
+            'Slack_2_max'    :   np.max(slack2),
+            'Slack_2_25p'    :   np.percentile(slack2, 25),
+            'Slack_2_75p'    :   np.percentile(slack2, 75),
+            'Slack_2_norm'    :   np.linalg.norm(slack2),
+            "Slack_1_nonzero":   np.sum(abs(slack1)>=tol)
+        }
+
+
+        return ans
+    def VGraph(self, tol=1e-9):
+        """
+        Returns statistics of the variable graph.
+        """
+        pass
+    # End of feature extraction
+    #######################
+
+
+
 
 
 class VarConstGraph:
