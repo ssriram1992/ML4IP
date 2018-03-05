@@ -31,6 +31,21 @@ def Py2Cplex(Prob):
         M.set_problem_name(Prob)
     return M
 
+def Py2CplexMIP(Prob):
+    """
+    Given a problem (MIP object)
+        min c^T x subject to
+        Ax = b
+        x >= 0
+        x_i \in \Z if i \in intcon
+    returns a CPLEX model object 
+    """
+    M = Py2Cplex(Prob)
+    types =  ['C' if i else 'I' for i in cont]
+    M.variables.set_types(zip(range(Prob.f.size), types))
+    return M
+
+
 def File2Py(filename):
     M = cplex.Cplex()
     M.read(filename)
@@ -54,7 +69,7 @@ def createNewMip(filename, random = True, f = None, A = None, b = None, Aeq = No
         lb = np.random.randint(-3,3,(Nvar,1)).astype(float)    
         ub = np.random.randint(10,150,(Nvar,1)).astype(float)
         cont = np.random.randint(0,2,(Nvar,))
-    # Contonuous or integer?
+    # Continuous or integer?
     types =  ['C' if i else 'I' for i in cont]
     # less than equal to contraints and equality contraints
     senses = "L"*len(b)+"E"*len(beq)

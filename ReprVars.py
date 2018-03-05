@@ -24,7 +24,9 @@ class MIP:
 
     Other objects saved:
     MIP.CplexObjectLP
-        Created after MakeCplex function. The Cplex Object which stores the same MIP
+        Created after MakeCplex function. The Cplex Object which stores the same MIP as LP
+    self.CplexObjectMIP
+        Created after MakeCplex function. The Cplex Object which stores the same MIP as MIP
     MIP.LPInfo
         Created after LPSolve function. Stores
             LPSolution vector
@@ -243,6 +245,8 @@ class MIP:
         if not self.CplexMade:
             C = Py2Cplex(self)
             self.CplexObjectLP = C
+            C2 = Py2CplexMIP(self)
+            self.CplexObjectMIP = C2 
             self.CplexMade = True
     def LPSolve(self):
         """
@@ -262,15 +266,6 @@ class MIP:
                                             TablNB = True,
                                             precission = 13
                                         )
-    def drawVarConstGraph(self, forTableaux = 0):
-        """
-        Draws the variable constraint Graph either for the original problem.
-        Or for the simplex tableaux
-        """
-        if forTableaux:
-            pass #TODO
-        else:
-            VCG = VarConstGraph(self.Aeq != 0)
     # End of general methods
     #######################
     # Feature extraction
@@ -347,14 +342,33 @@ class MIP:
             'Slack_2_norm'    :   np.linalg.norm(slack2),
             "Slack_1_nonzero":   np.sum(abs(slack1)>=tol)
         }
-
-
-        return ans
     def VGraph(self, tol=1e-9):
         """
         Returns statistics of the variable graph.
         """
-        pass
+        v = self.f.size
+        # Making the adjacency of variable graph
+        VG = np.zeros((v, v))
+        for i in range(v):
+            for j in range(i+1):
+                for k in Aeq:
+                    if abs(k[i]) >= tol and abs(k[j]) >= tol:
+                        VG[i, j] = 1
+                        VG[j, i] = 1
+                        break
+        Variable_Node_vec = np.sum(VG, axis = 0)   # Node degree of each variable node        
+        return {
+            'VG_V_mean':   np.mean(Variable_Node_vec),              # Mean degree of variable node
+            'VG_V_std' :   np.std(Variable_Node_vec),               # Std. dev of degree of variable node
+            'VG_V_min' :   np.min(Variable_Node_vec),               # Min degree of a variable node
+            'VG_V_max' :   np.max(Variable_Node_vec),               # Max degree of a variable node
+            'VG_V_25p' :   np.percentile(Variable_Node_vec, 25),    # 25th percentile degree of a variable node
+            'VG_V_75p' :   np.percentile(Variable_Node_vec, 75),    # 75th percentile degree of a variable node
+            'EdgeDens' :   np.sum(VG)*1.0/np.size(VG)               # Percentage of edges pressent
+        }
+
+
+
     # End of feature extraction
     #######################
 
