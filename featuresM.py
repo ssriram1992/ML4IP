@@ -3,7 +3,7 @@ import scipy as sp
 import scipy.sparse					# To handle sparse data
 import scipy.sparse.linalg 			# To perform linear algebra operation on sparse data
 import copy
-import cStringIO
+import io as  cStringIO
 import re
 
 
@@ -57,7 +57,6 @@ def getProbingFeatures(c, TL):
          numRowsPresolved = ret.group(1)
          numColsPresolved = ret.group(2)
          numNonzerosPresolved = ret.group(3)
-
          #skips next line (if needed to get it, just assign nextLine = next(....) 
          next(linesIter, None)
       elif line.startswith("Clique table"):
@@ -80,7 +79,7 @@ def getProbingFeatures(c, TL):
 
    numCuts = [0] * len(cutNames)
 
-   for i in xrange(len(cutNames)):
+   for i in range(len(cutNames)):
       numCuts[i] = c.solution.MIP.get_num_cuts(cutParamVal[i])
       D['numCuts' + cutNames[i]] = int(numCuts[i])
 
