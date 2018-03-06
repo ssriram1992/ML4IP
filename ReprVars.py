@@ -12,6 +12,12 @@ class MIP:
     x >= 0
     x \in \Z for x\ not\in cont
 
+    MIP.f, MIP.Aeq, MIP.beq, MIP.cont are used to save the objects
+    Important function for feature extraction:
+    MIP.features(tol = 1e-9)
+        Extracts all features from an instance and returns a dictionary with the feature names and
+        feature values.
+
     Flags:
     # These are binary falgs which are switched when a computation heavy operation is done
     # so that the operation need not be repeated unnecessarily.
@@ -39,7 +45,8 @@ class MIP:
     MIP.write(name, path="./")
         Writes 4 csv files in the given path with the name prefix given, saving Aeq, beq, obj and cont
     MIP.MakeCplex()
-        Makes a Cplex object of LP relaxation of the given MIP instance and saves it.
+        Makes a Cplex object of original MIP as well as the LP relaxation
+        of the given MIP instance and saves it.
     MIP.SolveLP()
         Solve the LP relaxation of the problem and create the LPInfo object
 
@@ -65,7 +72,9 @@ class MIP:
         Integer slack vector 2 is a vector of size equal to the number of variables in the problem
         If x_i is a continuous variable, then the i-th coordinate of this vector is 0
         else the i-th coordinate is  x_i - np.floor(x_i)
-
+    MIP.VGraph(tol = 1e-9)
+        Returns a dictionary with
+        {'VG_V_mean', 'VG_V_std', 'VG_V_min', 'VG_V_max', 'VG_V_25p', 'VG_V_75p', 'EdgeDens'}
     """
     def __init__(self, form = 0, data = dict(),filenames = False, delimiter = ','):
         """
@@ -246,7 +255,7 @@ class MIP:
             C = Py2Cplex(self)
             self.CplexObjectLP = C
             C2 = Py2CplexMIP(self)
-            self.CplexObjectMIP = C2 
+            self.CplexObjectMIP = C2
             self.CplexMade = True
     def LPSolve(self):
         """
@@ -269,6 +278,19 @@ class MIP:
     # End of general methods
     #######################
     # Feature extraction
+    def features(self, tol = 1e-9):
+        """ 
+        Combines all the extracted features and returns one big feature dictionary
+        """
+        feature = {}
+        self.MakeCplex()
+        self.LPSolve()
+        feature.update(self.size()) # Adding size related features
+        feature.update(self.VCGraph(tol)) # Adding Variable-Constraint Graph features
+        feature.update(self.VGraph(tol))  # Adding variable graph features
+        feature.update(self.LPIntegerSlack()) # LP integer slack features
+        feature.update(self.LPObjVal()) # LP objective value
+        return feature
     def size(self):
         """
         Returns the number of variables, number of constraints and number of integer
@@ -344,7 +366,9 @@ class MIP:
         }
     def VGraph(self, tol=1e-9):
         """
-        Returns statistics of the variable graph.
+        Returns statistics of the variable graph. It is a simple graph where each vertex
+        represent the variables. An edge between them implies that the variables
+        appear in the same constraint ever.
         """
         v = self.f.size
         # Making the adjacency of variable graph
@@ -356,7 +380,7 @@ class MIP:
                         VG[i, j] = 1
                         VG[j, i] = 1
                         break
-        Variable_Node_vec = np.sum(VG, axis = 0)   # Node degree of each variable node        
+        Variable_Node_vec = np.sum(VG, axis = 0)   # Node degree of each variable node
         return {
             'VG_V_mean':   np.mean(Variable_Node_vec),              # Mean degree of variable node
             'VG_V_std' :   np.std(Variable_Node_vec),               # Std. dev of degree of variable node
