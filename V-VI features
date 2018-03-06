@@ -106,7 +106,7 @@ def OnetoAllA(self):
   MaxNegNeg = -math.inf
 
   for i in range(m):
-      a=Aeq[i][:]
+'      a=Aeq[i][:]
       pos=a[a>0]
       neg=a[a<0]
       sumPos=np.sum(pos)
@@ -156,4 +156,4 @@ def OnetoAllA(self):
   return{'MinPosPos':MinPosPos,'MaxPosPos':MaxPosPos,'MinPosNeg':MinPosNeg,
          'MaxPosNeg':MaxPosNeg,'MinNegPos':MinNegPos,
          'MaxNegPos':MaxNegPos,'MinNegNeg':MinNegNeg,
-         'MaxNegNeg)
+         'MaxNegNeg':MaxNegNeg)
