@@ -1,6 +1,12 @@
 import numpy as np
 import scipy as sp
 from CPLEXInterface import *
+import scipy.sparse                 # To handle sparse data
+import scipy.sparse.linalg          # To perform linear algebra operation on sparse data
+import copy
+import io as  cStringIO
+import re
+
 
 # Making changes in Sri branch
 class MIP:
@@ -61,7 +67,7 @@ class MIP:
         _V_ refers to variable node statistics
         _C_ refers to constraint node statistics
     MIP.LPObjVal()
-        Returns LP objective value
+        Returns LP objective value as dictionary {'LPObjective'}
     MIP.LPIntegerSlack()
         Returns a dictionary with {'Slack_1_mean', 'Slack_1_std', 'Slack_1_min', 'Slack_1_max', 'Slack_1_25p', 'Slack_1_75p', 'Slack_1_norm',
                                    'Slack_2_mean', 'Slack_2_std', 'Slack_2_min', 'Slack_2_max', 'Slack_2_25p', 'Slack_2_75p', 'Slack_2_norm',
@@ -75,6 +81,12 @@ class MIP:
     MIP.VGraph(tol = 1e-9)
         Returns a dictionary with
         {'VG_V_mean', 'VG_V_std', 'VG_V_min', 'VG_V_max', 'VG_V_25p', 'VG_V_75p', 'EdgeDens'}
+    MIP.getProbingFeatures(TL=10)
+        Inputs time limit in seconds for CPLEX probing of the MIP.
+        Returns a dictionary with {'numRowsPresolved', 'numColsPresolved', 'numNonzerosPresolved', 
+                                    'totalPresolveTime', 'totalProbingTime', 'cliqueTable', 
+                                    'numCuts' (of each type),
+                                    'numCutsTotal', 'numIter', 'numNodesProc'}
     """
     def __init__(self, form = 0, data = dict(),filenames = False, delimiter = ','):
         """
@@ -270,9 +282,9 @@ class MIP:
             self.LPInfo = getfromCPLEX(self.CplexObjectLP,
                                             solution = True,
                                             objective = True,
-                                            tableaux = True,
-                                            basic = True,
-                                            TablNB = True,
+                                            tableaux = False,
+                                            basic = False,
+                                            TablNB = False,
                                             precission = 13
                                         )
     # End of general methods
@@ -290,6 +302,7 @@ class MIP:
         feature.update(self.VGraph(tol))  # Adding variable graph features
         feature.update(self.LPIntegerSlack()) # LP integer slack features
         feature.update(self.LPObjVal()) # LP objective value
+        feature.update(self.getProbingFeatures()) # MIP probing features
         return feature
     def size(self):
         """
@@ -332,7 +345,7 @@ class MIP:
         Returns the objective Value of LP relaxation
         """
         self.LPSolve()
-        return LPInfo["Objective"]
+        return {'LPObjective':LPInfo["Objective"]}
     def LPIntegerSlack(self, tol = 1e-9):
         """
         Returns statistics of the integer slack vector 1 and integer slack vector 2
@@ -390,9 +403,79 @@ class MIP:
             'VG_V_75p' :   np.percentile(Variable_Node_vec, 75),    # 75th percentile degree of a variable node
             'EdgeDens' :   np.sum(VG)*1.0/np.size(VG)               # Percentage of edges pressent
         }
-
-
-
+    def getProbingFeatures(self, TL = 10):
+        """
+        Up to the time limit specified, gets the number of cuts of various types added by CPLEX.
+        Also gives presolve information
+        """
+        self.MakeCplex()
+        #dictionary to be returned
+        D = {}
+        c = self.CplexObjectMIP # Short name for the object
+        #sets time limit
+        c.parameters.timelimit.set(TL)
+        #sets up display info
+        out = cStringIO.StringIO()
+        c.set_results_stream(out)
+        c.parameters.mip.display.set(3)
+        #Solves only rootnode (INCLUDING LP!), without any cuts (but primal heuristics, etc. are all on, maybe affects the results)
+        c.solve()
+        #######################
+        #Reads off following features: CPU times for presolving and relaxation
+        #, # of constraints, variables, nonzero entries in the constraint matrix,
+        #and clique table inequalities after presolving 
+        s = out.getvalue()
+        totalPresolveTime = 0.0
+        totalProbingTime = 0.0
+        cliqueTable = 0
+        numRowsPresolved = -1.0
+        numColsPresolved = -1.0
+        numNonzerosPresolved = -1.0
+        lines = s.splitlines()
+        linesIter = iter(lines)
+        for line in linesIter:  
+           if line.startswith("Presolve time"):
+              ret = re.search("Presolve time = ([0-9\.]+)", line)
+              totalPresolveTime += float(ret.group(1))
+           elif line.startswith("Probing time"):
+              ret = re.search("Probing time = ([0-9\.]+)", line)
+              totalProbingTime += float(ret.group(1))
+           elif line.startswith("Reduced MIP"):
+              ret = re.search("Reduced MIP has ([0-9]+) rows, ([0-9]+) columns, and ([0-9]+)", line)
+              numRowsPresolved = ret.group(1)
+              numColsPresolved = ret.group(2)
+              numNonzerosPresolved = ret.group(3)
+              #skips next line (if needed to get it, just assign nextLine = next(....) 
+              next(linesIter, None)
+           elif line.startswith("Clique table"):
+              ret = re.search("Clique table members: ([0-9]+)", line)
+              cliqueTable = ret.group(1)         
+        D['numRowsPresolved'] = int(numRowsPresolved)
+        D['numColsPresolved'] = int(numColsPresolved)
+        D['numNonzerosPresolved'] = int(numNonzerosPresolved)
+        D['totalPresolveTime'] = float(totalPresolveTime)
+        D['totalProbingTime'] = float(totalProbingTime)
+        D['cliqueTable'] = int(cliqueTable)
+        #######################
+        # Computes number of each of 7 different cut types, and total cuts applied
+        cutNames = ["cover", "GUB_cover", "flow_cover", "clique", "fractional", "MIR", "flow_path", "disjunctive", "implied_bound", "zero_half", "multi_commodity_flow", "lift_and_project"]
+        #param value in class c.solution.MIP.cut_type, indexed relative to the cutNames
+        cutParamVal = [0,1,2,3,4,5,6,7,8,9,10,14]
+        numCuts = [0] * len(cutNames)
+        for i in range(len(cutNames)):
+           numCuts[i] = c.solution.MIP.get_num_cuts(cutParamVal[i])
+           D['numCuts' + cutNames[i]] = int(numCuts[i])
+        numCutsTotal = sum(numCuts)
+        D['numCutsTotal'] = int(numCutsTotal)
+        #######################
+        # Computes number of iterations and number of nodes
+        numIter = c.solution.progress.get_num_iterations()
+        numNodesProc = c.solution.progress.get_num_nodes_processed()
+        D['numIter'] = int(numIter)
+        D['numNodesProc'] = int(numNodesProc)
+        # Computes relative gap (WHAT TO DO IF NO SOLUTION FOUND? Gets exception (try on enlight13))
+        #relGap = c.solution.MIP.get_mip_relative_gap() 
+        return D
     # End of feature extraction
     #######################
 
@@ -400,8 +483,3 @@ class MIP:
 
 
 
-class VarConstGraph:
-    def __init__(self):
-        self.Adj = np.array([[]]).reshape((0,0))
-    def __init__(self, Adj):
-        self.Adj = Adj
