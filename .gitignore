@@ -1,0 +1,8 @@
+# Do not delete this file. This contains the list of files that 
+# git should ignore. Typically files that are generated during
+# compilation and data files. However if a file needs to be added
+# to Git, it can be added manually. Just the command "git add ."
+# will not add any!
+
+*.pyc
+*.csv

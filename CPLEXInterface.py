@@ -41,7 +41,7 @@ def Py2CplexMIP(Prob):
     returns a CPLEX model object 
     """
     M = Py2Cplex(Prob)
-    types =  ['C' if i else 'I' for i in cont]
+    types =  ['C' if i else 'I' for i in Prob.cont]
     M.variables.set_types(zip(range(Prob.f.size), types))
     return M
 

@@ -33,6 +33,7 @@ class MIP:
     LPSolved
     GraphDrawn
     TableGraphDrawn
+    Probed
 
     Other objects saved:
     MIP.CplexObjectLP
@@ -46,6 +47,9 @@ class MIP:
             LPSolution simplex tableau
             LPSolution basic variable set and non Basic variable set
             LPSolution NonBasic Tableaux
+    MIP.Probingdict
+        Created after getProbingFeatures function. This is a dictionary object and stores the
+        probing result. This is required as multiple probing can give different results.
 
     Methods of use:
     MIP.write(name, path="./")
@@ -101,6 +105,7 @@ class MIP:
         self.LPSolved = False                     # Boolean to store if LP relaxation is solved
         self.GraphDrawn = False                   # Boolean to store if the Variable Constraint Graph is drawn
         self.TableGraphDrawn = False              # Boolean to store if the Variable Constraint Graph is drawn for simplex tableaux
+        self.Probed = False                       # Boolean to store if probing is done
         if 'name' in data:                        # If the problem has to be named
             self.name = data["name"]
         else:
@@ -287,6 +292,7 @@ class MIP:
                                             TablNB = False,
                                             precission = 13
                                         )
+            self.LPSolved = True
     # End of general methods
     #######################
     # Feature extraction
@@ -345,7 +351,7 @@ class MIP:
         Returns the objective Value of LP relaxation
         """
         self.LPSolve()
-        return {'LPObjective':LPInfo["Objective"]}
+        return {'LPObjective':self.LPInfo["Objective"]}
     def LPIntegerSlack(self, tol = 1e-9):
         """
         Returns statistics of the integer slack vector 1 and integer slack vector 2
@@ -357,9 +363,9 @@ class MIP:
         else the i-th coordinate is  x_i - np.floor(x_i)
         """
         self.LPSolve()
-        LPSol = LPInfo["Solution"].squeeze()
+        LPSol = self.LPInfo["Solution"].squeeze()
         slack2 = (LPSol - np.floor(LPSol))*(1-self.cont)
-        slack1 = slack2[cont==0]
+        slack1 = slack2[self.cont==0]
         return {
             'Slack_1_mean'   :   np.mean(slack1),
             'Slack_1_std'    :   np.std(slack1),
@@ -388,7 +394,7 @@ class MIP:
         VG = np.zeros((v, v))
         for i in range(v):
             for j in range(i+1):
-                for k in Aeq:
+                for k in self.Aeq:
                     if abs(k[i]) >= tol and abs(k[j]) >= tol:
                         VG[i, j] = 1
                         VG[j, i] = 1
@@ -408,73 +414,77 @@ class MIP:
         Up to the time limit specified, gets the number of cuts of various types added by CPLEX.
         Also gives presolve information
         """
-        self.MakeCplex()
-        #dictionary to be returned
-        D = {}
-        c = self.CplexObjectMIP # Short name for the object
-        #sets time limit
-        c.parameters.timelimit.set(TL)
-        #sets up display info
-        out = cStringIO.StringIO()
-        c.set_results_stream(out)
-        c.parameters.mip.display.set(3)
-        #Solves only rootnode (INCLUDING LP!), without any cuts (but primal heuristics, etc. are all on, maybe affects the results)
-        c.solve()
-        #######################
-        #Reads off following features: CPU times for presolving and relaxation
-        #, # of constraints, variables, nonzero entries in the constraint matrix,
-        #and clique table inequalities after presolving 
-        s = out.getvalue()
-        totalPresolveTime = 0.0
-        totalProbingTime = 0.0
-        cliqueTable = 0
-        numRowsPresolved = -1.0
-        numColsPresolved = -1.0
-        numNonzerosPresolved = -1.0
-        lines = s.splitlines()
-        linesIter = iter(lines)
-        for line in linesIter:  
-           if line.startswith("Presolve time"):
-              ret = re.search("Presolve time = ([0-9\.]+)", line)
-              totalPresolveTime += float(ret.group(1))
-           elif line.startswith("Probing time"):
-              ret = re.search("Probing time = ([0-9\.]+)", line)
-              totalProbingTime += float(ret.group(1))
-           elif line.startswith("Reduced MIP"):
-              ret = re.search("Reduced MIP has ([0-9]+) rows, ([0-9]+) columns, and ([0-9]+)", line)
-              numRowsPresolved = ret.group(1)
-              numColsPresolved = ret.group(2)
-              numNonzerosPresolved = ret.group(3)
-              #skips next line (if needed to get it, just assign nextLine = next(....) 
-              next(linesIter, None)
-           elif line.startswith("Clique table"):
-              ret = re.search("Clique table members: ([0-9]+)", line)
-              cliqueTable = ret.group(1)         
-        D['numRowsPresolved'] = int(numRowsPresolved)
-        D['numColsPresolved'] = int(numColsPresolved)
-        D['numNonzerosPresolved'] = int(numNonzerosPresolved)
-        D['totalPresolveTime'] = float(totalPresolveTime)
-        D['totalProbingTime'] = float(totalProbingTime)
-        D['cliqueTable'] = int(cliqueTable)
-        #######################
-        # Computes number of each of 7 different cut types, and total cuts applied
-        cutNames = ["cover", "GUB_cover", "flow_cover", "clique", "fractional", "MIR", "flow_path", "disjunctive", "implied_bound", "zero_half", "multi_commodity_flow", "lift_and_project"]
-        #param value in class c.solution.MIP.cut_type, indexed relative to the cutNames
-        cutParamVal = [0,1,2,3,4,5,6,7,8,9,10,14]
-        numCuts = [0] * len(cutNames)
-        for i in range(len(cutNames)):
-           numCuts[i] = c.solution.MIP.get_num_cuts(cutParamVal[i])
-           D['numCuts' + cutNames[i]] = int(numCuts[i])
-        numCutsTotal = sum(numCuts)
-        D['numCutsTotal'] = int(numCutsTotal)
-        #######################
-        # Computes number of iterations and number of nodes
-        numIter = c.solution.progress.get_num_iterations()
-        numNodesProc = c.solution.progress.get_num_nodes_processed()
-        D['numIter'] = int(numIter)
-        D['numNodesProc'] = int(numNodesProc)
-        # Computes relative gap (WHAT TO DO IF NO SOLUTION FOUND? Gets exception (try on enlight13))
-        #relGap = c.solution.MIP.get_mip_relative_gap() 
+        if not Probed:
+            self.MakeCplex()
+            #dictionary to be returned
+            D = {}
+            c = self.CplexObjectMIP # Short name for the object
+            #sets time limit
+            c.parameters.timelimit.set(TL)
+            #sets up display info
+            out = cStringIO.StringIO()
+            c.set_results_stream(out)
+            c.parameters.mip.display.set(3)
+            #Solves only rootnode (INCLUDING LP!), without any cuts (but primal heuristics, etc. are all on, maybe affects the results)
+            c.solve()
+            #######################
+            #Reads off following features: CPU times for presolving and relaxation
+            #, # of constraints, variables, nonzero entries in the constraint matrix,
+            #and clique table inequalities after presolving 
+            s = out.getvalue()
+            totalPresolveTime = 0.0
+            totalProbingTime = 0.0
+            cliqueTable = 0
+            numRowsPresolved = -1.0
+            numColsPresolved = -1.0
+            numNonzerosPresolved = -1.0
+            lines = s.splitlines()
+            linesIter = iter(lines)
+            for line in linesIter:  
+               if line.startswith("Presolve time"):
+                  ret = re.search("Presolve time = ([0-9\.]+)", line)
+                  totalPresolveTime += float(ret.group(1))
+               elif line.startswith("Probing time"):
+                  ret = re.search("Probing time = ([0-9\.]+)", line)
+                  totalProbingTime += float(ret.group(1))
+               elif line.startswith("Reduced MIP"):
+                  ret = re.search("Reduced MIP has ([0-9]+) rows, ([0-9]+) columns, and ([0-9]+)", line)
+                  numRowsPresolved = ret.group(1)
+                  numColsPresolved = ret.group(2)
+                  numNonzerosPresolved = ret.group(3)
+                  #skips next line (if needed to get it, just assign nextLine = next(....) 
+                  next(linesIter, None)
+               elif line.startswith("Clique table"):
+                  ret = re.search("Clique table members: ([0-9]+)", line)
+                  cliqueTable = ret.group(1)         
+            D['numRowsPresolved'] = int(numRowsPresolved)
+            D['numColsPresolved'] = int(numColsPresolved)
+            D['numNonzerosPresolved'] = int(numNonzerosPresolved)
+            D['totalPresolveTime'] = float(totalPresolveTime)
+            D['totalProbingTime'] = float(totalProbingTime)
+            D['cliqueTable'] = int(cliqueTable)
+            #######################
+            # Computes number of each of 7 different cut types, and total cuts applied
+            cutNames = ["cover", "GUB_cover", "flow_cover", "clique", "fractional", "MIR", "flow_path", "disjunctive", "implied_bound", "zero_half", "multi_commodity_flow", "lift_and_project"]
+            #param value in class c.solution.MIP.cut_type, indexed relative to the cutNames
+            cutParamVal = [0,1,2,3,4,5,6,7,8,9,10,14]
+            numCuts = [0] * len(cutNames)
+            for i in range(len(cutNames)):
+               numCuts[i] = c.solution.MIP.get_num_cuts(cutParamVal[i])
+               D['numCuts' + cutNames[i]] = int(numCuts[i])
+            numCutsTotal = sum(numCuts)
+            D['numCutsTotal'] = int(numCutsTotal)
+            #######################
+            # Computes number of iterations and number of nodes
+            numIter = c.solution.progress.get_num_iterations()
+            numNodesProc = c.solution.progress.get_num_nodes_processed()
+            D['numIter'] = int(numIter)
+            D['numNodesProc'] = int(numNodesProc)
+            # Computes relative gap (WHAT TO DO IF NO SOLUTION FOUND? Gets exception (try on enlight13))
+            #relGap = c.solution.MIP.get_mip_relative_gap() 
+            self.Probingdict = D
+        else:
+            D = self.Probingdict 
         return D
     # End of feature extraction
     #######################
