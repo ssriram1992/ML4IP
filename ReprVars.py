@@ -312,12 +312,14 @@ class MIP:
         if returnAsVect:
             K = list(feature.keys())
             K.sort()
-            feature_vector = [feature[i] for i in K]
+            feature_vector =  [self.name] + [feature[i] for i in K]
+            K = ["Name"] + K
             if returnNames:
-                return np.array(feature_vector), K
+                return feature_vector, K
             else:
-                return np.array(feature_vector)
+                return feature_vector
         else:
+            feature["Name"] = self.name
             return feature
     def size(self):
         """

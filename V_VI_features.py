@@ -1,26 +1,27 @@
-###################################################
-#Standard deviation of normalized coefficients: ci/m
-###################################################
-
 def stdObjM(self):
-  stdObjM= np.std(f/m,ddof=1)
-  return stdObjM
+  """
+  Standard deviation of normalized coefficients: f_i/Number_of_constraints
+  """
+  stdObjM= np.std(self.f/self.Aeq.shape[0],ddof=1)
+  return {"stdObjM": stdObjM}
   
-##############################################
-#Standard deviation of ci/ni where ni denotes 
-#the number of nonzero entries in column i of A
-##############################################
 
 def stdObjN(self):
+  """
+  #Standard deviation of ci/ni where ni denotes 
+  #the number of nonzero entries in column i of A
+  """
+  n = self.Aeq.shape[1]
+  m = self.Aeq.shape[0]
   fNew1=np.zeros((n,1))
   fNew2=np.zeros((n,1))
   for i in range(n):
       c = 0
       for j in range(m):
-          if Aeq[j][i] != 0:
+          if self.Aeq[j][i] != 0:
               c += 1
-      fNew1[i][0] = f[i][0]/c
-      fNew2[i][0] = f[i][0]/np.sqrt(c)
+      fNew1[i][0] = self.f[i][0]/c
+      fNew2[i][0] = self.f[i][0]/np.sqrt(c)
   stdObjN=np.std(fNew1,ddof=1)
   stdObjRootN = np.std(fNew2,ddof=1)
   return {'stdObjN':stdObjN, 'stdObjRootN':stdObjRootN}
@@ -42,8 +43,8 @@ def AeqNormStats(self):
   return {'AeqNormMean':AeqNormMean,'AeqNormStd':AeqNormStd}
 
 #####################################################
-Variation coefficient of normalized absolute nonzero 
-entries per row: mean and Std
+# Variation coefficient of normalized absolute nonzero 
+# entries per row: mean and Std
 #####################################################
 
 def CVStats(self):
@@ -54,8 +55,8 @@ def CVStats(self):
   return {'CVMean':CVMean,'CVStd':CVStd}
 
 ############################################################
-Min/max for ratios of constraint coeffs. to RHS: Min and Max 
-ratios across positive and negative right-hand-sides 
+# Min/max for ratios of constraint coeffs. to RHS: Min and Max 
+# ratios across positive and negative right-hand-sides 
 ############################################################
 
 def Aoverb(self):
@@ -88,11 +89,11 @@ def Aoverb(self):
   return {'MinPos':MinPos,'MaxPos':MaxPos,'MinNeg':MinNeg,'MaxNeg':MaxNeg}
   
 ########################################################################  
-Min/max for one-to-all coeff ratios: The statistics are over the 
-ratios of a variable’s coefﬁcient, to the sum over all other variables’ 
-coefﬁcients, for a given constraint. Four versions of these ratios are 
-considered: positive (negative) coefﬁcient to sum of positive (negative) 
-coefﬁcients
+# Min/max for one-to-all coeff ratios: The statistics are over the 
+# ratios of a variable’s coefﬁcient, to the sum over all other variables’ 
+# coefﬁcients, for a given constraint. Four versions of these ratios are 
+# considered: positive (negative) coefﬁcient to sum of positive (negative) 
+# coefﬁcients
 ########################################################################
 
 def OnetoAllA(self):
@@ -106,7 +107,7 @@ def OnetoAllA(self):
   MaxNegNeg = -math.inf
 
   for i in range(m):
-'      a=Aeq[i][:]
+      a=Aeq[i][:]
       pos=a[a>0]
       neg=a[a<0]
       sumPos=np.sum(pos)
