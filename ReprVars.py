@@ -296,7 +296,7 @@ class MIP:
     # End of general methods
     #######################
     # Feature extraction
-    def features(self, tol = 1e-9):
+    def features(self, tol = 1e-9, returnAsVect = False, returnNames = False):
         """ 
         Combines all the extracted features and returns one big feature dictionary
         """
@@ -309,7 +309,16 @@ class MIP:
         feature.update(self.LPIntegerSlack()) # LP integer slack features
         feature.update(self.LPObjVal()) # LP objective value
         feature.update(self.getProbingFeatures()) # MIP probing features
-        return feature
+        if returnAsVect:
+            K = list(feature.keys())
+            K.sort()
+            feature_vector = [feature[i] for i in K]
+            if returnNames:
+                return np.array(feature_vector), K
+            else:
+                return np.array(feature_vector)
+        else:
+            return feature
     def size(self):
         """
         Returns the number of variables, number of constraints and number of integer
@@ -414,7 +423,7 @@ class MIP:
         Up to the time limit specified, gets the number of cuts of various types added by CPLEX.
         Also gives presolve information
         """
-        if not Probed:
+        if not self.Probed:
             self.MakeCplex()
             #dictionary to be returned
             D = {}
@@ -483,6 +492,7 @@ class MIP:
             # Computes relative gap (WHAT TO DO IF NO SOLUTION FOUND? Gets exception (try on enlight13))
             #relGap = c.solution.MIP.get_mip_relative_gap() 
             self.Probingdict = D
+            self.Probed = True
         else:
             D = self.Probingdict 
         return D
