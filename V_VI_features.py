@@ -27,12 +27,13 @@ def stdObjN(self):
   return {'stdObjN':stdObjN, 'stdObjRootN':stdObjRootN}
 
 
-#####################################################
-#Distribution of normalized constraint matrix entries, 
-#Aij/bi: mean and std (only of elements where bi != 0
-#####################################################
+
 
 def AeqNormStats(self):
+  """
+  #Distribution of normalized constraint matrix entries, 
+  #Aij/bi: mean and std (only of elements where bi != 0
+  """
   AeqNorm=np.zeros((m,n))
   for i in range(m):
       for j in range(n):
