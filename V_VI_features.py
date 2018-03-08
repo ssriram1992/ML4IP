@@ -31,36 +31,41 @@ def stdObjN(self):
 
 def AeqNormStats(self):
   """
-  #Distribution of normalized constraint matrix entries, 
-  #Aij/bi: mean and std (only of elements where bi != 0
+  Distribution of normalized constraint matrix entries, 
+  Aij/bi: mean and std (only of elements where bi != 0
   """
+  n = self.Aeq.shape[1]
+  m = self.Aeq.shape[0]
   AeqNorm=np.zeros((m,n))
   for i in range(m):
       for j in range(n):
-          if beq[i][0]!=0:
-              AeqNorm[i][j]=Aeq[i][j]/beq[i][0]
+          if self.beq[i][0]!=0:
+              AeqNorm[i][j]=self.Aeq[i][j]/self.beq[i][0]
   AeqNormMean=np.mean(AeqNorm)
   AeqNormStd=np.std(AeqNorm,ddof=1)
   return {'AeqNormMean':AeqNormMean,'AeqNormStd':AeqNormStd}
 
-#####################################################
-# Variation coefficient of normalized absolute nonzero 
-# entries per row: mean and Std
-#####################################################
 
 def CVStats(self):
-  AeqAbsolute=np.absolute(Aeq)
+  """
+  Variation coefficient of normalized absolute nonzero 
+  entries per row: mean and Std
+  """
+  AeqAbsolute=np.absolute(self.Aeq)
   var=variation(AeqAbsolute,axis=1)
   CVMean=np.mean(var)
   CVStd=np.std(var,ddof=1)
   return {'CVMean':CVMean,'CVStd':CVStd}
 
-############################################################
-# Min/max for ratios of constraint coeffs. to RHS: Min and Max 
-# ratios across positive and negative right-hand-sides 
-############################################################
 
-def Aoverb(self):
+
+def AOverb(self):
+  """
+  Min/max for ratios of constraint coeffs. to RHS: Min and Max 
+  ratios across positive and negative right-hand-sides 
+  """
+  n = self.Aeq.shape[1]
+  m = self.Aeq.shape[0]
   b=np.zeros((1,n))
 
   MinPos = math.inf
@@ -69,18 +74,18 @@ def Aoverb(self):
   MaxNeg = -math.inf
 
   for i in range(m):
-      if beq[i][0]>0:
+      if self.beq[i][0]>0:
           for j in range(n):
-              b[0][j]=Aeq[i][j]/beq[i][0]
+              b[0][j]=self.Aeq[i][j]/self.beq[i][0]
               MinTemp = np.amin(b)
               MaxTemp = np.amax(b)
           if MinTemp<MinPos:
               MinPos = MinTemp
           if MaxTemp>MaxPos:
               MaxPos = MaxTemp
-      elif beq[i][0]<0:
+      elif self.beq[i][0]<0:
           for j in range(n):
-              b[0][j]=Aeq[i][j]/beq[i][0]
+              b[0][j]=self.Aeq[i][j]/self.beq[i][0]
               MinTemp = np.amin(b)
               MaxTemp = np.amax(b)
           if MinTemp<MinNeg:
@@ -89,15 +94,19 @@ def Aoverb(self):
               MaxNeg = MaxTemp
   return {'MinPos':MinPos,'MaxPos':MaxPos,'MinNeg':MinNeg,'MaxNeg':MaxNeg}
   
-########################################################################  
-# Min/max for one-to-all coeff ratios: The statistics are over the 
-# ratios of a variable’s coefﬁcient, to the sum over all other variables’ 
-# coefﬁcients, for a given constraint. Four versions of these ratios are 
-# considered: positive (negative) coefﬁcient to sum of positive (negative) 
-# coefﬁcients
-########################################################################
+  
 
 def OnetoAllA(self):
+  """  
+  Min/max for one-to-all coeff ratios: The statistics are over the 
+  ratios of a variable’s coefﬁcient, to the sum over all other variables’ 
+  coefﬁcients, for a given constraint. Four versions of these ratios are 
+  considered: positive (negative) coefﬁcient to sum of positive (negative) 
+  coefﬁcients
+  """
+  n = self.Aeq.shape[1]
+  m = self.Aeq.shape[0]
+  
   MinPosPos = math.inf
   MaxPosPos = -math.inf
   MinPosNeg = math.inf
@@ -108,7 +117,7 @@ def OnetoAllA(self):
   MaxNegNeg = -math.inf
 
   for i in range(m):
-      a=Aeq[i][:]
+      a=self.Aeq[i][:]
       pos=a[a>0]
       neg=a[a<0]
       sumPos=np.sum(pos)
