@@ -84,9 +84,21 @@ class MIP:
         Integer slack vector 2 is a vector of size equal to the number of variables in the problem
         If x_i is a continuous variable, then the i-th coordinate of this vector is 0
         else the i-th coordinate is  x_i - np.floor(x_i)
-    MIP.VGraph(tol = 1e-9)
-        Returns a dictionary with
+    MIP.VCGraph(tol = 1e-9)
+        Returns a dictionary with 
         {'VG_V_mean', 'VG_V_std', 'VG_V_min', 'VG_V_max', 'VG_V_25p', 'VG_V_75p', 'EdgeDens'}
+    MIP.stdObjM()
+        Returns the standard deviation of normalized coefficients as dictionary {'stdObjM'}
+    MIP.stdObjN()
+        Returns a dictionary with {'stdObjN', 'stdObjRootN'}
+    MIP.AeqNormStats()
+        Returns a dictionary with {'AeqNormMean', 'AeqNormStd'}
+    MIP.CVStats()
+        Returns a dictionary with {'CVMean', 'CVStd'}
+    MIP.AOverb()
+        Returns a dictionary with {'MinPos', 'MaxPos', 'MinNeg', 'MaxNeg'}
+    MIP.OnetoAllA()
+        Returns a dictionary with {'MinPosPos', 'MaxPosPos', 'MinPosNeg', 'MaxPosNeg', 'MinNegPos', 'MaxNegPos', 'MinNegNeg', 'MaxNegNeg'}
     MIP.getProbingFeatures(TL=10)
         Inputs time limit in seconds for CPLEX probing of the MIP.
         Returns a dictionary with {'numRowsPresolved', 'numColsPresolved', 'numNonzerosPresolved', 
@@ -402,7 +414,7 @@ class MIP:
 	    Standard deviation of normalized coefficients: f_i/Number_of_constraints
 	    """
 	    stdObjM= np.std(self.f/self.Aeq.shape[0],ddof=1)
-	    return {"stdObjM": stdObjM}
+	    return {'stdObjM': stdObjM}
   
     def stdObjN(self):
     	"""
