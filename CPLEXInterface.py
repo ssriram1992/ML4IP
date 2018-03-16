@@ -28,7 +28,7 @@ def Py2Cplex(Prob):
     # Adding the constraints
     M.linear_constraints.add(lin_expr = LHS, senses='E'*nCons, rhs=Prob.beq.squeeze().tolist())
     if Prob.name != '':
-        M.set_problem_name(Prob)
+        M.set_problem_name(Prob.name)
     return M
 
 def Py2CplexMIP(Prob):
