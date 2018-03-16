@@ -85,7 +85,7 @@ class MIP:
         If x_i is a continuous variable, then the i-th coordinate of this vector is 0
         else the i-th coordinate is  x_i - np.floor(x_i)
     MIP.VCGraph(tol = 1e-9)
-        Returns a dictionary with 
+        Returns a dictionary with
         {'VG_V_mean', 'VG_V_std', 'VG_V_min', 'VG_V_max', 'VG_V_25p', 'VG_V_75p', 'EdgeDens'}
     MIP.stdObjM()
         Returns the standard deviation of normalized coefficients as dictionary {'stdObjM'}
@@ -98,11 +98,12 @@ class MIP:
     MIP.AOverb()
         Returns a dictionary with {'MinPos', 'MaxPos', 'MinNeg', 'MaxNeg'}
     MIP.OnetoAllA()
-        Returns a dictionary with {'MinPosPos', 'MaxPosPos', 'MinPosNeg', 'MaxPosNeg', 'MinNegPos', 'MaxNegPos', 'MinNegNeg', 'MaxNegNeg'}
+        Returns a dictionary with {'MinPosPos', 'MaxPosPos', 'MinPosNeg', 'MaxPosNeg', 'MinNegPos', 'MaxNegPos',
+                                'MinNegNeg', 'MaxNegNeg'}
     MIP.getProbingFeatures(TL=10)
         Inputs time limit in seconds for CPLEX probing of the MIP.
-        Returns a dictionary with {'numRowsPresolved', 'numColsPresolved', 'numNonzerosPresolved', 
-                                    'totalPresolveTime', 'totalProbingTime', 'cliqueTable', 
+        Returns a dictionary with {'numRowsPresolved', 'numColsPresolved', 'numNonzerosPresolved',
+                                    'totalPresolveTime', 'totalProbingTime', 'cliqueTable',
                                     'numCuts' (of each type),
                                     'numCutsTotal', 'numIter', 'numNodesProc'}
     """
@@ -311,7 +312,7 @@ class MIP:
     #######################
     # Feature extraction
     def features(self, tol = 1e-9, returnAsVect = False, returnNames = False):
-        """ 
+        """
         Combines all the extracted features and returns one big feature dictionary
         """
         feature = {}
@@ -323,6 +324,12 @@ class MIP:
         feature.update(self.LPIntegerSlack()) # LP integer slack features
         feature.update(self.LPObjVal()) # LP objective value
         feature.update(self.getProbingFeatures()) # MIP probing features
+        feature.update(self.stdObjM()) # Standard deviation of normalized coefficients: f_i/Number_of_constraints
+        feature.update(self.stdObjN()) # Standard deviation of ci/ni
+        feature.update(self.AeqNormStats()) # Stats of Aij/bi
+        feature.update(self.CVStats()) # Stats of abs non zero entries each row
+        feature.update(self.AOverb()) # Min/Max for ratios of constraint coeffs
+        feature.update(self.OnetoAllA()) # Min/max for one-to-all coeff ratios
         if returnAsVect:
             K = list(feature.keys())
             K.sort()
@@ -343,7 +350,7 @@ class MIP:
         nVar = np.size(self.f)
         nCons = np.size(self.beq)
         nInt = nVar - np.sum(self.cont)
-        return {'nVar':nVar, 'nCons':nCons, 'nInt':nInt}
+        return {'nVar':nVar, 'nCons':nCons, 'nInt':nInt, 'PercentageInteger':1.0*nInt/nVar}
     def VCGraph(self, tol = 1e-9):
         """
         Returns statistics of the variable constraint graph.
@@ -415,12 +422,12 @@ class MIP:
 	    """
 	    stdObjM= np.std(self.f/self.Aeq.shape[0],ddof=1)
 	    return {'stdObjM': stdObjM}
-  
+
     def stdObjN(self):
     	"""
-    	#Standard deviation of ci/ni where ni denotes 
-	#the number of nonzero entries in column i of A
-	"""
+    	#Standard deviation of ci/ni where ni denotes
+	    #the number of nonzero entries in column i of A
+	    """
     	n = self.Aeq.shape[1]
     	m = self.Aeq.shape[0]
     	fNew1 = np.zeros((1,n))
@@ -435,13 +442,12 @@ class MIP:
     	stdObjN=np.std(fNew1,ddof=1)
     	stdObjRootN = np.std(fNew2,ddof=1)
     	return {'stdObjN':stdObjN, 'stdObjRootN':stdObjRootN}
-
     def AeqNormStats(self):
         """
-        Distribution of normalized constraint matrix entries, 
+        Distribution of normalized constraint matrix entries,
         Aij/bi: mean and std (only of elements where bi != 0)
         """
-    
+
         n = self.Aeq.shape[1]
         m = self.Aeq.shape[0]
         AeqNorm=np.zeros((m,n))
@@ -452,10 +458,9 @@ class MIP:
         AeqNormMean=np.mean(AeqNorm)
         AeqNormStd=np.std(AeqNorm,ddof=1)
         return {'AeqNormMean':AeqNormMean,'AeqNormStd':AeqNormStd}
-
     def CVStats(self):
         """
-        Variation coefficient of normalized absolute nonzero 
+        Variation coefficient of normalized absolute nonzero
         entries per row: mean and Std
         """
         AeqAbsolute=np.absolute(self.Aeq)
@@ -463,21 +468,18 @@ class MIP:
         CVMean=np.mean(var)
         CVStd=np.std(var,ddof=1)
         return {'CVMean':CVMean,'CVStd':CVStd}
-
     def AOverb(self):
         """
-        Min/max for ratios of constraint coeffs. to RHS: Min and Max 
-        ratios across positive and negative right-hand-sides 
+        Min/max for ratios of constraint coeffs. to RHS: Min and Max
+        ratios across positive and negative right-hand-sides
         """
         n = self.Aeq.shape[1]
         m = self.Aeq.shape[0]
         b=np.zeros((1,n))
-
         MinPos = math.inf
         MaxPos = -math.inf
         MinNeg = math.inf
         MaxNeg = -math.inf
-
         for i in range(m):
             if self.beq[i]>0:
                 for j in range(n):
@@ -498,18 +500,16 @@ class MIP:
                 if MaxTemp1>MaxNeg:
                     MaxNeg = MaxTemp1
         return {'MinPos':MinPos,'MaxPos':MaxPos,'MinNeg':MinNeg,'MaxNeg':MaxNeg}
-	  
     def OnetoAllA(self):
-        """  
-        Min/max for one-to-all coeff ratios: The statistics are over the 
-        ratios of a variables coefficient, to the sum over all other variables 
-        coefficients, for a given constraint. Four versions of these ratios are 
-        considered: positive (negative) coefficient to sum of positive (negative) 
+        """
+        Min/max for one-to-all coeff ratios: The statistics are over the
+        ratios of a variables coefficient, to the sum over all other variables
+        coefficients, for a given constraint. Four versions of these ratios are
+        considered: positive (negative) coefficient to sum of positive (negative)
         coefficients
         """
         n = self.Aeq.shape[1]
         m = self.Aeq.shape[0]
-	  
         MinPosPos = math.inf
         MaxPosPos = -math.inf
         MinPosNeg = math.inf
@@ -518,7 +518,6 @@ class MIP:
         MaxNegPos = -math.inf
         MinNegNeg = math.inf
         MaxNegNeg = -math.inf
-
         for i in range(m):
             a=self.Aeq[i][:]
             pos=a[a>0]
@@ -571,7 +570,6 @@ class MIP:
     		'MaxPosNeg':MaxPosNeg,'MinNegPos':MinNegPos,
     		'MaxNegPos':MaxNegPos,'MinNegNeg':MinNegNeg,
     		'MaxNegNeg':MaxNegNeg}
-		
     def VGraph(self, tol=1e-9):
         """
         Returns statistics of the variable graph. It is a simple graph where each vertex
@@ -619,7 +617,7 @@ class MIP:
             #######################
             #Reads off following features: CPU times for presolving and relaxation
             #, # of constraints, variables, nonzero entries in the constraint matrix,
-            #and clique table inequalities after presolving 
+            #and clique table inequalities after presolving
             s = out.getvalue()
             totalPresolveTime = 0.0
             totalProbingTime = 0.0
@@ -629,7 +627,7 @@ class MIP:
             numNonzerosPresolved = -1.0
             lines = s.splitlines()
             linesIter = iter(lines)
-            for line in linesIter:  
+            for line in linesIter:
                if line.startswith("Presolve time"):
                   ret = re.search("Presolve time = ([0-9\.]+)", line)
                   totalPresolveTime += float(ret.group(1))
@@ -641,11 +639,11 @@ class MIP:
                   numRowsPresolved = ret.group(1)
                   numColsPresolved = ret.group(2)
                   numNonzerosPresolved = ret.group(3)
-                  #skips next line (if needed to get it, just assign nextLine = next(....) 
+                  #skips next line (if needed to get it, just assign nextLine = next(....)
                   next(linesIter, None)
                elif line.startswith("Clique table"):
                   ret = re.search("Clique table members: ([0-9]+)", line)
-                  cliqueTable = ret.group(1)         
+                  cliqueTable = ret.group(1)
             D['numRowsPresolved'] = int(numRowsPresolved)
             D['numColsPresolved'] = int(numColsPresolved)
             D['numNonzerosPresolved'] = int(numNonzerosPresolved)
@@ -670,11 +668,11 @@ class MIP:
             D['numIter'] = int(numIter)
             D['numNodesProc'] = int(numNodesProc)
             # Computes relative gap (WHAT TO DO IF NO SOLUTION FOUND? Gets exception (try on enlight13))
-            #relGap = c.solution.MIP.get_mip_relative_gap() 
+            #relGap = c.solution.MIP.get_mip_relative_gap()
             self.Probingdict = D
             self.Probed = True
         else:
-            D = self.Probingdict 
+            D = self.Probingdict
         return D
     # End of feature extraction
     #######################
