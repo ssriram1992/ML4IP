@@ -3,12 +3,14 @@ import sys
 
 
 args = sys.argv
+
+F_naam = args[1].split("_")[0]
 if len(args)<2:
     print("Usage is python genFeat <MIPlist> <SolFolder> where <MIPlist> is name of a file containing a list of strings. For each string, ")
     print("MIP object would be made with <string>_Aeq.csv, <string>_beq.csv and so on")
 
-path = "/home-4/ssankar5@jhu.edu/scratch/201801/Int_Data/Data/"
-Sol_path = "/home-4/ssankar5@jhu.edu/scratch/201801/Int_Data/Indiv_Sol/OneFolder/" 
+path = "/home-4/ssankar5@jhu.edu/scratch/201804/"+F_naam+"/"
+Sol_path = "/home-4/ssankar5@jhu.edu/scratch/201804/"+F_naam+"/"
 
 
 FileObj = open(args[1], "r")
@@ -22,7 +24,7 @@ count = 0
 for name in names:
     # Mixed integer program
     # Solution analysis
-    Sol_value = np.genfromtxt(Sol_path+name+"Sol.csv", delimiter = ",").squeeze()
+    Sol_value = np.genfromtxt(Sol_path+name+"_Sol.csv", delimiter = ",").squeeze()
     v_MIP = [] # List for the mixed integer program    
     LP = Sol_value[0]
     v_MIP.append(LP) # LP relaxed solution
@@ -36,10 +38,10 @@ for name in names:
     # Problem data analysis
     data = {
             'name':name+"_MILP",
-            'f':path+name+"obj.csv",
-            "Aeq":path+name+"Aeq.csv",
-            "beq":path+name+"beq.csv",
-            "cont":path+name+"cont.csv"
+            'f':path+name+"_obj.csv",
+            "Aeq":path+name+"_Aeq.csv",
+            "beq":path+name+"_beq.csv",
+            "cont":path+name+"_cont.csv"
             }
     M = MIP(form = 1,
             data = data,
@@ -74,7 +76,7 @@ for name in names:
     # Display completion
     print("Done for problem number: "+name)
     count = count+1
-    if count % 10 == 0:
-        np.savetxt("F_"+args[1]+".csv", FeaturesAll, fmt="%s")
+    if count % 5 == 0:
+        np.savetxt("Feat_100/F_"+args[1]+".csv", FeaturesAll, fmt="%s")
 
-np.savetxt("F_"+args[1]+".csv", FeaturesAll, fmt="%s")
+np.savetxt("Feat_100/F_"+args[1]+".csv", FeaturesAll, fmt="%s")
