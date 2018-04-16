@@ -1,4 +1,5 @@
 import cplex
+from ReprVars import *
 import numpy as np
 import scipy as sp
 import scipy.sparse
@@ -334,8 +335,9 @@ def Cplex2Py(M, sparse=False):
             data = {
                 "f":f,
                 "Aeq":Aeq,
+                "name":M.get_problem_name(),
                 "beq":beq,
-                "cont":cont,
+                "cont":np.array(cont),
                 "A":A,
                 "b":b,
                 "lb":lb,

@@ -11,6 +11,42 @@ from Cuts import *
 from ReprVars import *
 from CPLEXInterface import *
 
+def run_compare_root_rat(Batch = "int_A", Num_IP = 10, Nvar = 25, 
+                Ncons = 10, NumRounds = 10, nRows = [2,3,5,10], 
+                nCuts = 10, path = './', verbose = 0, scratch = './'):    
+    values = []
+    names = []
+    problem = 0
+    while problem < Num_IP:
+        # A = np.random.randint(-5,5,size = (Ncons, Nvar)) 
+        A = np.random.uniform(-5,6,size = (Ncons, Nvar))
+        # Generate a non-negative vector for variable values
+        temp = np.ones((Nvar,1))
+        # Choosing b this way ensures LP feasibility
+        b = A.dot(temp)
+        f = np.arange(Nvar)-np.round(Nvar/2)  
+        cont = np.random.randint(0,2, size = (Nvar,))
+        M = MIP(form = 1, data = {
+            'Aeq':A,
+            'beq':b,
+            'f':f,
+            'cont':cont
+        })
+        name = Batch + "_" + str(problem+1)
+        _,v = compare_root_problem(M, NumRounds, name = name, nRows = nRows, nCuts = nCuts, verbose = verbose-1, scratch = scratch) 
+        if v is None:
+            continue
+        M.write(name, path = path)
+        np.savetxt(path + name + "_Sol.csv", np.array(v), delimiter = ',', fmt = '%6.6f')
+        values.append(v)
+        if verbose > 0:
+            print(name +" completed")
+        names.append(name)
+        problem = problem + 1
+    np.savetxt(path + Batch + "_Sol.csv", np.array(values), delimiter = ',', fmt = '%6.6f')
+    np.savetxt(path + Batch + "_names.csv", np.array(names), delimiter = ',', fmt = '%s')
+    return values
+
 def run_compare_root(Batch = "int_A", Num_IP = 10, Nvar = 25, 
                 Ncons = 10, NumRounds = 10, nRows = [2,3,5,10], 
                 nCuts = 10, path = './', verbose = 0, scratch = './'):    
@@ -39,7 +75,7 @@ def run_compare_root(Batch = "int_A", Num_IP = 10, Nvar = 25,
         M.write(name, path = path)
         np.savetxt(path + name + "_Sol.csv", np.array(v), delimiter = ',', fmt = '%6.6f')
         values.append(v)
-        if verbose > 1:
+        if verbose > 0:
             print(name +" completed")
         names.append(name)
         problem = problem + 1
