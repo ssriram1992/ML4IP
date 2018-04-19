@@ -510,85 +510,84 @@ class MIP:
         considered: positive (negative) coefficient to sum of positive (negative)
         coefficients
         """
-		List1 = [] #pospos
-		List2 = [] #posneg
-		List3 = [] #negneg
-		List4 = [] #negpos
-
-		for i in range(m):
-			a=Aeq[i][:]
-			pos=a[a>0]
-			neg=a[a<0]
-			sumPos=np.sum(pos)
-			sumNeg=np.sum(neg)
-			sizeP = np.size(pos)
-			sizeN = np.size(neg)
-			c=np.zeros((1,sizeP))
-			d=np.zeros((1,sizeP))
-			e=np.zeros((1,sizeN))
-			f=np.zeros((1,sizeN))
-			#PosPos
-			if sumPos == 0: #No positive numbers
-				List1.append(0)
-				List2.append(0)
-			else:
-				for j in range(sizeP):
-					if (sumPos-pos[j])==0: #only 1 positive
-						c[0][j]=pos[j]
-					else:
-						c[0][j]=pos[j]/(sumPos-pos[j]) #positive/positive
-					List1.append(c[0][j])
-			#PosNeg
-			for j in range(sizeP):
-				if sumNeg == 0:
-					d[0][j]=-pos[j]
-				elif sumPos != 0:
-					d[0][j]=pos[j]/sumNeg #positive/negative
-				List2.append(d[0][j])
-			#NegNeg
-			if sumNeg == 0: #No negative numbers
-				List3.append(0)
-				List4.append(0)
-			else:
-				for j in range(sizeN):
-					if (sumNeg-neg[j])==0: #only 1 negative
-						e[0][j]=-neg[j]
-					else:
-						e[0][j]=neg[j]/(sumNeg-neg[j]) #negative/negative
-					List3.append(e[0][j])
-			#NegPos
-			for j in range(sizeN):
-				if sumPos == 0:
-					f[0][j]=-pos[j]
-				elif sumNeg != 0:
-					f[0][j]=neg[j]/sumPos #negative/positive
-				List4.append(f[0][j])        
-		MinPosPos=min(List1)
-		MaxPosPos=max(List1)
-		MeanPosPos=np.mean(List1)
-		StdPosPos=np.std(List1,ddof=1)
-		MinPosNeg=min(List2)
-		MaxPosNeg=max(List2)
-		MeanPosNeg=np.mean(List2)
-		StdPosNeg=np.std(List2,ddof=1)
-		MinNegNeg=min(List3)
-		MaxNegNeg=max(List3)
-		MeanNegNeg=np.mean(List3)
-		StdNegNeg=np.std(List3,ddof=1)
-		MinNegPos=min(List4)
-		MaxNegPos=max(List4)
-		MeanNegPos=np.mean(List4)
-		StdNegPos=np.std(List4,ddof=1)
-		
-		return{'MinPosPos':MinPosPos,'MaxPosPos':MaxPosPos,
-			   'MinPosNeg':MinPosNeg,'MaxPosNeg':MaxPosNeg,
-			   'MinNegPos':MinNegPos,'MaxNegPos':MaxNegPos,
-			   'MinNegNeg':MinNegNeg,'MaxNegNeg':MaxNegNeg,
-			   'MeanPosPos':MeanPosPos, 'StdPosPos':StdPosPos,
-			   'MeanPosNeg':MeanPosNeg, 'StdPosNeg':StdPosNeg,
-			   'MeanNegNeg':MeanNegNeg, 'StdNegNeg':StdNegNeg,
-			   'MeanNegPos':MeanNegPos, 'StdNegPos':StdNegPos}    
-	def VGraph(self, tol=1e-9):
+        List1 = [] #pospos
+        List2 = [] #posneg
+        List3 = [] #negneg
+        List4 = [] #negpos
+        for i in range(m):
+            a=Aeq[i][:]
+            pos=a[a>0]
+            neg=a[a<0]
+            sumPos=np.sum(pos)
+            sumNeg=np.sum(neg)
+            sizeP = np.size(pos)
+            sizeN = np.size(neg)
+            c=np.zeros((1,sizeP))
+            d=np.zeros((1,sizeP))
+            e=np.zeros((1,sizeN))
+            f=np.zeros((1,sizeN))
+            #PosPos
+            if sumPos == 0: #No positive numbers
+                List1.append(0)
+                List2.append(0)
+            else:
+                for j in range(sizeP):
+                    if (sumPos-pos[j])==0: #only 1 positive
+                        c[0][j]=pos[j]
+                    else:
+                        c[0][j]=pos[j]/(sumPos-pos[j]) #positive/positive
+                    List1.append(c[0][j])
+            #PosNeg
+            for j in range(sizeP):
+                if sumNeg == 0:
+                    d[0][j]=-pos[j]
+                elif sumPos != 0:
+                    d[0][j]=pos[j]/sumNeg #positive/negative
+                List2.append(d[0][j])
+            #NegNeg
+            if sumNeg == 0: #No negative numbers
+                List3.append(0)
+                List4.append(0)
+            else:
+                for j in range(sizeN):
+                    if (sumNeg-neg[j])==0: #only 1 negative
+                        e[0][j]=-neg[j]
+                    else:
+                        e[0][j]=neg[j]/(sumNeg-neg[j]) #negative/negative
+                    List3.append(e[0][j])
+            #NegPos
+            for j in range(sizeN):
+                if sumPos == 0:
+                    f[0][j]=-pos[j]
+                elif sumNeg != 0:
+                    f[0][j]=neg[j]/sumPos #negative/positive
+                List4.append(f[0][j])        
+        MinPosPos=min(List1)
+        MaxPosPos=max(List1)
+        MeanPosPos=np.mean(List1)
+        StdPosPos=np.std(List1,ddof=1)
+        MinPosNeg=min(List2)
+        MaxPosNeg=max(List2)
+        MeanPosNeg=np.mean(List2)
+        StdPosNeg=np.std(List2,ddof=1)
+        MinNegNeg=min(List3)
+        MaxNegNeg=max(List3)
+        MeanNegNeg=np.mean(List3)
+        StdNegNeg=np.std(List3,ddof=1)
+        MinNegPos=min(List4)
+        MaxNegPos=max(List4)
+        MeanNegPos=np.mean(List4)
+        StdNegPos=np.std(List4,ddof=1)
+        
+        return{'MinPosPos':MinPosPos,'MaxPosPos':MaxPosPos,
+               'MinPosNeg':MinPosNeg,'MaxPosNeg':MaxPosNeg,
+               'MinNegPos':MinNegPos,'MaxNegPos':MaxNegPos,
+               'MinNegNeg':MinNegNeg,'MaxNegNeg':MaxNegNeg,
+               'MeanPosPos':MeanPosPos, 'StdPosPos':StdPosPos,
+               'MeanPosNeg':MeanPosNeg, 'StdPosNeg':StdPosNeg,
+               'MeanNegNeg':MeanNegNeg, 'StdNegNeg':StdNegNeg,
+               'MeanNegPos':MeanNegPos, 'StdNegPos':StdNegPos}    
+    def VGraph(self, tol=1e-9):
         """
         Returns statistics of the variable graph. It is a simple graph where each vertex
         represent the variables. An edge between them implies that the variables
@@ -706,7 +705,7 @@ class MIP:
         A_norm = Aeq/nrm
         A_dot = A_norm.T.dot(A_norm)
         tole = 1e-9
-        mask = (np.tril(np.ones(n, n)) - np.identity(n)) > tol
+        mask = (np.tril(np.ones((n, n))) - np.identity(n)) > tole
         scalar_vec = np.extract(arr = A_dot, condition = mask) # vector of scalar products 
         G['scalar_mean_Aeq'] = np.mean(scalar_vec)
         G['scalar_sd_Aeq'] = np.std(scalar_vec)
@@ -722,7 +721,7 @@ class MIP:
         G['nrm_coeffvar_NB'] = G['nrm_sd_NB']/G['nrm_mean_NB']
         A_norm = Aeq/nrm
         A_dot = A_norm.T.dot(A_norm)
-        mask = (np.tril(np.ones(n, n)) - np.identity(n)) > tol
+        mask = (np.tril(np.ones((n, n))) - np.identity(n)) > tole
         scalar_vec = np.extract(arr = A_dot, condition = mask) # vector of scalar products 
         G['scalar_mean_NB'] = np.mean(scalar_vec)
         G['scalar_sd_NB'] = np.std(scalar_vec)
