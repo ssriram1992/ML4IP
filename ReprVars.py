@@ -105,6 +105,8 @@ class MIP:
                                     'totalPresolveTime', 'totalProbingTime', 'cliqueTable',
                                     'numCuts' (of each type),
                                     'numCutsTotal', 'numIter', 'numNodesProc'}
+    MIP.geometricFeatures()
+        Returns a dictionary with 
     """
     def __init__(self, form = 0, data = dict(),filenames = False, delimiter = ','):
         """
@@ -303,7 +305,7 @@ class MIP:
                                             objective = True,
                                             tableaux = False,
                                             basic = False,
-                                            TablNB = False,
+                                            TablNB = True, # Needed for geometric features
                                             precission = 13
                                         )
             self.LPSolved = True
@@ -329,6 +331,7 @@ class MIP:
         feature.update(self.CVStats()) # Stats of abs non zero entries each row
         feature.update(self.AOverb()) # Min/Max for ratios of constraint coeffs
         feature.update(self.OnetoAllA()) # Min/max for one-to-all coeff ratios
+        feature.update(self.geometricFeatures()) # Geometry of the columns of Aeq
         if returnAsVect:
             K = list(feature.keys())
             K.sort()
@@ -507,69 +510,85 @@ class MIP:
         considered: positive (negative) coefficient to sum of positive (negative)
         coefficients
         """
-        n = self.Aeq.shape[1]
-        m = self.Aeq.shape[0]
-        MinPosPos = math.inf
-        MaxPosPos = -math.inf
-        MinPosNeg = math.inf
-        MaxPosNeg = -math.inf
-        MinNegPos = math.inf
-        MaxNegPos = -math.inf
-        MinNegNeg = math.inf
-        MaxNegNeg = -math.inf
-        for i in range(m):
-            a=self.Aeq[i][:]
-            pos=a[a>0]
-            neg=a[a<0]
-            sumPos=np.sum(pos)
-            sumNeg=np.sum(neg)
-            sizeP = np.size(pos)
-            sizeN = np.size(neg)
-            c=np.zeros((1,sizeP))
-            d=np.zeros((1,sizeP))
-            e=np.zeros((1,sizeN))
-            f=np.zeros((1,sizeN))
-            for j in range(sizeP):
-                if (sumPos-pos[j])==0:
-                    c[0][j]=pos[j]
-                else:
-                    c[0][j]=pos[j]/(sumPos-pos[j]) #positive/positive
-                d[0][j]=pos[j]/sumNeg #positive/negative
-                MinPosTemp=np.amin(c)
-                MaxPosTemp=np.amax(c)
-                MinNegTemp=np.amin(d)
-                MaxNegTemp=np.amax(d)
-            if MinPosTemp<MinPosPos:
-                MinPosPos = MinPosTemp
-            if MaxPosTemp>MaxPosPos:
-                MaxPosPos = MaxPosTemp
-            if MinNegTemp<MinPosNeg:
-                MinPosNeg = MinNegTemp
-            if MaxNegTemp>MaxPosNeg:
-                MaxPosNeg = MaxNegTemp
-            for j in range(sizeN):
-                if (sumNeg-neg[j])==0:
-                    e[0][j]=neg[j]
-                else:
-                    e[0][j]=neg[j]/(sumNeg-neg[j]) #negative/negative
-                f[0][j]=neg[j]/sumPos #negative/positive
-                MinPosTemp=np.amin(f)
-                MaxPosTemp=np.amax(f)
-                MinNegTemp=np.amin(e)
-                MaxNegTemp=np.amax(e)
-            if MinPosTemp<MinNegPos:
-                MinNegPos = MinNegTemp
-            if MaxPosTemp>MaxNegPos:
-                MaxNegPos = MaxPosTemp
-            if MinNegTemp<MinNegNeg:
-                MinNegNeg = MinNegTemp
-            if MaxNegTemp>MaxNegNeg:
-                MaxNegNeg = MaxNegTemp
-        return{'MinPosPos':MinPosPos,'MaxPosPos':MaxPosPos,'MinPosNeg':MinPosNeg,
-    		'MaxPosNeg':MaxPosNeg,'MinNegPos':MinNegPos,
-    		'MaxNegPos':MaxNegPos,'MinNegNeg':MinNegNeg,
-    		'MaxNegNeg':MaxNegNeg}
-    def VGraph(self, tol=1e-9):
+		List1 = [] #pospos
+		List2 = [] #posneg
+		List3 = [] #negneg
+		List4 = [] #negpos
+
+		for i in range(m):
+			a=Aeq[i][:]
+			pos=a[a>0]
+			neg=a[a<0]
+			sumPos=np.sum(pos)
+			sumNeg=np.sum(neg)
+			sizeP = np.size(pos)
+			sizeN = np.size(neg)
+			c=np.zeros((1,sizeP))
+			d=np.zeros((1,sizeP))
+			e=np.zeros((1,sizeN))
+			f=np.zeros((1,sizeN))
+			#PosPos
+			if sumPos == 0: #No positive numbers
+				List1.append(0)
+				List2.append(0)
+			else:
+				for j in range(sizeP):
+					if (sumPos-pos[j])==0: #only 1 positive
+						c[0][j]=pos[j]
+					else:
+						c[0][j]=pos[j]/(sumPos-pos[j]) #positive/positive
+					List1.append(c[0][j])
+			#PosNeg
+			for j in range(sizeP):
+				if sumNeg == 0:
+					d[0][j]=-pos[j]
+				elif sumPos != 0:
+					d[0][j]=pos[j]/sumNeg #positive/negative
+				List2.append(d[0][j])
+			#NegNeg
+			if sumNeg == 0: #No negative numbers
+				List3.append(0)
+				List4.append(0)
+			else:
+				for j in range(sizeN):
+					if (sumNeg-neg[j])==0: #only 1 negative
+						e[0][j]=-neg[j]
+					else:
+						e[0][j]=neg[j]/(sumNeg-neg[j]) #negative/negative
+					List3.append(e[0][j])
+			#NegPos
+			for j in range(sizeN):
+				if sumPos == 0:
+					f[0][j]=-pos[j]
+				elif sumNeg != 0:
+					f[0][j]=neg[j]/sumPos #negative/positive
+				List4.append(f[0][j])        
+		MinPosPos=min(List1)
+		MaxPosPos=max(List1)
+		MeanPosPos=np.mean(List1)
+		StdPosPos=np.std(List1,ddof=1)
+		MinPosNeg=min(List2)
+		MaxPosNeg=max(List2)
+		MeanPosNeg=np.mean(List2)
+		StdPosNeg=np.std(List2,ddof=1)
+		MinNegNeg=min(List3)
+		MaxNegNeg=max(List3)
+		MeanNegNeg=np.mean(List3)
+		StdNegNeg=np.std(List3,ddof=1)
+		MinNegPos=min(List4)
+		MaxNegPos=max(List4)
+		MeanNegPos=np.mean(List4)
+		StdNegPos=np.std(List4,ddof=1)
+		
+		return{'MinPosPos':MinPosPos,'MaxPosPos':MaxPosPos,
+			   'MinPosNeg':MinPosNeg,'MaxPosNeg':MaxPosNeg,
+			   'MinNegPos':MinNegPos,'MaxNegPos':MaxNegPos,
+			   'MinNegNeg':MinNegNeg,'MaxNegNeg':MaxNegNeg,
+			   'MeanPosPos':MeanPosPos, 'StdPosPos':StdPosPos,
+			   'MeanPosNeg':MeanPosNeg, 'StdPosNeg':StdPosNeg,
+			   'MeanNegNeg':MeanNegNeg, 'StdNegNeg':StdNegNeg,
+			   'MeanNegPos':MeanNegPos, 'StdNegPos':StdNegPos}    
+	def VGraph(self, tol=1e-9):
         """
         Returns statistics of the variable graph. It is a simple graph where each vertex
         represent the variables. An edge between them implies that the variables
@@ -673,6 +692,43 @@ class MIP:
         else:
             D = self.Probingdict
         return D
+    # Geometric features
+    def geometricFeatures(self):
+        Aeq = self.Aeq
+        # We are interested in taking the scalar product of every column of Aeq with every column of Aeq.
+        # This is precisely obtained by (Aeq^T)(Aeq)
+        G = {}
+        (m, n) = Aeq.shape
+        nrm = np.linalg.norm(Aeq,axis=0)
+        G['nrm_mean_Aeq'] = np.mean(nrm)
+        G['nrm_sd_Aeq'] = np.std(nrm)
+        G['nrm_coeffvar_Aeq'] = G['nrm_sd_Aeq']/G['nrm_mean_Aeq']
+        A_norm = Aeq/nrm
+        A_dot = A_norm.T.dot(A_norm)
+        tole = 1e-9
+        mask = (np.tril(np.ones(n, n)) - np.identity(n)) > tol
+        scalar_vec = np.extract(arr = A_dot, condition = mask) # vector of scalar products 
+        G['scalar_mean_Aeq'] = np.mean(scalar_vec)
+        G['scalar_sd_Aeq'] = np.std(scalar_vec)
+        G['scalar_var_Aeq'] = np.var(scalar_vec)
+        G['scalar_coeffvar_Aeq'] = G['scalar_sd_Aeq']/G['scalar_mean_Aeq']
+        # Getting the same for Nonbasic tableaux
+        self.LPSolve()
+        Aeq = self.LPInfo["Tableaux_NB"].todense()
+        (m, n) = Aeq.shape
+        nrm = np.linalg.norm(Aeq,axis=0)
+        G['nrm_mean_NB'] = np.mean(nrm)
+        G['nrm_sd_NB'] = np.std(nrm)
+        G['nrm_coeffvar_NB'] = G['nrm_sd_NB']/G['nrm_mean_NB']
+        A_norm = Aeq/nrm
+        A_dot = A_norm.T.dot(A_norm)
+        mask = (np.tril(np.ones(n, n)) - np.identity(n)) > tol
+        scalar_vec = np.extract(arr = A_dot, condition = mask) # vector of scalar products 
+        G['scalar_mean_NB'] = np.mean(scalar_vec)
+        G['scalar_sd_NB'] = np.std(scalar_vec)
+        G['scalar_var_NB'] = np.var(scalar_vec)
+        G['scalar_coeffvar_NB'] = G['scalar_sd_NB']/G['scalar_mean_NB']
+        return G
     # End of feature extraction
     #######################
 
