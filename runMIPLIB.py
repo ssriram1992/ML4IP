@@ -11,6 +11,41 @@ from Cuts import *
 from ReprVars import *
 from CPLEXInterface import *
 
+
+
+def run_compare_root_csv(ListFile = "", NumRounds = 10, nRows = [2,5,10], 
+                solPrefix = "", solSuffix = "_more",
+                nCuts = 10, path = './', verbose = 0, scratch = './', doX = False, doGX = True):    
+    FileObj = open(ListFile, "r")
+    fnames = [line.rstrip() for line in FileObj.readlines()]
+    values = []
+    names = []
+    problem = 0
+    for nameLoop in fnames:
+        if verbose:
+            print ("Running "+nameLoop)
+        M = MIP(form = 1, data = {
+            'Aeq':path+nameLoop+"_Aeq.csv",
+            'beq':path+nameLoop+"_beq.csv",
+            'f':path+nameLoop+"_obj.csv",
+            'cont':path+nameLoop+"_cont.csv"
+        }, filenames = True)
+        name = nameLoop+solSuffix
+        _,v = compare_root_problem(M, NumRounds, name = name, nRows = nRows, nCuts = nCuts, verbose = verbose-1, scratch = scratch, doX = doX, doGX = doGX, useBestnonGMI = 0 ) 
+        if v is None:
+            continue
+        np.savetxt(path + solPrefix + name + solSuffix + ".csv", np.array(v), delimiter = ',', fmt = '%6.6f')
+        values.append(v)
+        if verbose > 0:
+            print(name +" completed")
+        names.append(name)
+        problem = problem + 1
+    np.savetxt(path + solPrefix + ListFile + solSuffix + "_Sol.csv", np.array(values), delimiter = ',', fmt = '%6.6f')
+    np.savetxt(path + solPrefix + ListFile + solSuffix + "_names.csv", np.array(names), delimiter = ',', fmt = '%s')
+    return values
+
+
+
 def run_compare_root_rat(Batch = "int_A", Num_IP = 10, Nvar = 25, 
                 Ncons = 10, NumRounds = 10, nRows = [2,3,5,10], 
                 nCuts = 10, path = './', verbose = 0, scratch = './'):    
@@ -193,7 +228,7 @@ def run_Race_CPLEX_random(Batch = "A", NumIP = 100, Nvar = 50, Ncons =20, BestOf
 
 
 
-def compare_root_problem(M, NumRounds, nRows = [2,3,5,10], nBad = 1, nCuts = 10, verbose = 0, name = "_", isCplexObj = False, scratch = './'):
+def compare_root_problem(M, NumRounds, nRows = [2,3,5,10], nBad = 1, nCuts = 10, verbose = 0, name = "_", isCplexObj = False, scratch = './', doX = True, doGX = True, useBestnonGMI = 1):
     """
     M is an "our" MIP object
     """
@@ -238,124 +273,138 @@ def compare_root_problem(M, NumRounds, nRows = [2,3,5,10], nBad = 1, nCuts = 10,
     if verbose > 0:
         print("GMIs generated")
     for row_ct in nRows:
-        ############################################
-        ############ REGULAR X-POLYTOPE ############
-        ############################################
-        # Pure integer
-        # Add X cuts        
-        C_X_p, best_X_p = ChooseBestCuts(C, cont*0, getfromCPLEX_Obj=LPS, 
-                    cutType = "X",
-                    Nrounds = NumRounds, 
-                    cutDetails={'nRows':row_ct, 'nCuts':nCuts, 'nBad':1}, 
-                    return_bestcut_param=True, verbose = verbose - 1, scratch = scratch )
-        names.append('C_X_p_'+str(row_ct))
-        values.append(C_X_p.solution.get_objective_value())
-        # Add XG cuts
-        C_XG_p, best_XG_p = ChooseBestCuts(C, cont*0, getfromCPLEX_Obj=LPS, 
-                    cutType = "X",
-                    Nrounds = NumRounds - 1,    # -1 because the best parameters from X will also be used here
-                    withGMI = True,             # Differene between X and XG is by controlling this
-                    cutDetails={'nRows':row_ct, 'nCuts':nCuts, 'nBad':1}, 
-                    return_bestcut_param=True, verbose = verbose - 1, scratch = scratch)
-        names.append('C_XG_p_'+str(row_ct))
-        # Generating an XG cuts with the best parameter of X
-        _, C2_XG_p = addUserCut(C, cont*0, LPS, "X", 
-                            cutDetails={'ans':best_X_p}, scratch = scratch
-                            )
-        C2_XG_p.solve()
-        values.append(np.maximum(
-                C2_XG_p.solution.get_objective_value(),
-                C_XG_p.solution.get_objective_value()
-            ))
-        if verbose > 0:
-            print(str(row_ct)+" row X cuts generated for pure")        
-        # Mixed integer
-        # X cut
-        C_X_m, best_X_m = ChooseBestCuts(C, cont, getfromCPLEX_Obj=LPS, 
-                    cutType = "X",
-                    Nrounds = NumRounds, 
-                    cutDetails={'nRows':row_ct, 'nCuts':nCuts, 'nBad':1}, 
-                    return_bestcut_param=True, verbose = verbose - 1, scratch = scratch)
-        names.append('C_X_m_'+str(row_ct))
-        values.append(C_X_m.solution.get_objective_value())
-        # Add XG cuts
-        C_XG_m, best_XG_m = ChooseBestCuts(C, cont, getfromCPLEX_Obj=LPS, 
-                    cutType = "X",
-                    Nrounds = NumRounds - 1,    # -1 because the best parameters from X will also be used here
-                    withGMI = True,             # Differene between X and XG is by controlling this
-                    cutDetails={'nRows':row_ct, 'nCuts':nCuts, 'nBad':1}, 
-                    return_bestcut_param=True, verbose = verbose - 1, scratch = scratch)
-        names.append('C_XG_m_'+str(row_ct))
-        # Generating an XG cuts with the best parameter of X
-        _, C2_XG_m = addUserCut(C, cont, LPS, "X", 
-                            cutDetails={'ans':best_X_m}, scratch = scratch
-                            )
-        C2_XG_m.solve()
-        values.append(np.maximum(
-                C2_XG_m.solution.get_objective_value(),
-                C_XG_m.solution.get_objective_value()
-            ))
-        if verbose > 0:
-            print(str(row_ct)+" row X cuts generated for mixed")        
-        ############################################
-        ########## GENERALIZED X-POLYTOPE ##########
-        ############################################
-        # Pure integer
-        # Add GX cuts  
-        C_GX_p, best_GX_p = ChooseBestCuts(C, cont*0, getfromCPLEX_Obj=LPS, 
-                    cutType = "GX",
-                    Nrounds = NumRounds, 
-                    cutDetails={'nRows':row_ct, 'nCuts':nCuts, 'nBad':1}, 
-                    return_bestcut_param=True, verbose = verbose - 1, scratch = scratch)
-        names.append('C_GX_p_'+str(row_ct))
-        values.append(C_GX_p.solution.get_objective_value())
-        # Add GXG cuts
-        C_GXG_p, best_GXG_p = ChooseBestCuts(C, cont*0, getfromCPLEX_Obj=LPS, 
-                    cutType = "GX",
-                    Nrounds = NumRounds - 1,    # -1 because the best parameters from X will also be used here
-                    withGMI = True,             # Differene between X and XG is by controlling this
-                    cutDetails={'nRows':row_ct, 'nCuts':nCuts, 'nBad':1}, 
-                    return_bestcut_param=True, verbose = verbose - 1, scratch = scratch)
-        names.append('C_GXG_p_'+str(row_ct))
-        # Generating an XG cuts with the best parameter of X
-        _, C2_GXG_p = addUserCut(C, cont*0, LPS, "GX", 
-                            cutDetails={'ans':best_GX_p}, scratch = scratch
-                            )
-        C2_GXG_p.solve()
-        values.append(np.maximum(
-                C2_GXG_p.solution.get_objective_value(),
-                C_GXG_p.solution.get_objective_value()
-            ))
-        if verbose > 0:
-            print(str(row_ct)+" row GX cuts generated for pure")        
-        # Mixed integer
-        # GX cut
-        C_GX_m, best_GX_m = ChooseBestCuts(C, cont, getfromCPLEX_Obj=LPS, 
-                    cutType = "GX",
-                    Nrounds = NumRounds, 
-                    cutDetails={'nRows':row_ct, 'nCuts':nCuts, 'nBad':1}, 
-                    return_bestcut_param=True, verbose = verbose - 1, scratch = scratch)
-        names.append('C_GX_m_'+str(row_ct))
-        values.append(C_GX_m.solution.get_objective_value())
-        # Add GXG cuts
-        C_GXG_m, best_GXG_m = ChooseBestCuts(C, cont, getfromCPLEX_Obj=LPS, 
-                    cutType = "GX",
-                    Nrounds = NumRounds - 1,    # -1 because the best parameters from X will also be used here
-                    withGMI = True,             # Differene between X and XG is by controlling this
-                    cutDetails={'nRows':row_ct, 'nCuts':nCuts, 'nBad':1}, 
-                    return_bestcut_param=True, verbose = verbose - 1, scratch = scratch)
-        names.append('C_GXG_m_'+str(row_ct))
-        # Generating an GXG cuts with the best parameter of GX
-        _, C2_GXG_m = addUserCut(C, cont, LPS, "GX", 
-                            cutDetails={'ans':best_GX_m}, scratch = scratch
-                            )
-        C2_GXG_m.solve()
-        values.append(np.maximum(
-                C2_GXG_m.solution.get_objective_value(),
-                C_GXG_m.solution.get_objective_value()
-            ))
-        if verbose > 0:
-            print(str(row_ct)+" row GX cuts generated for mixed")        
+        if doX:
+            ############################################
+            ############ REGULAR X-POLYTOPE ############
+            ############################################
+            # Pure integer
+            # Add X cuts        
+            C_X_p, best_X_p = ChooseBestCuts(C, cont*0, getfromCPLEX_Obj=LPS, 
+                        cutType = "X",
+                        Nrounds = NumRounds, 
+                        cutDetails={'nRows':row_ct, 'nCuts':nCuts, 'nBad':1}, 
+                        return_bestcut_param=True, verbose = verbose - 1, scratch = scratch )
+            names.append('C_X_p_'+str(row_ct))
+            values.append(C_X_p.solution.get_objective_value())
+            # Add XG cuts
+            C_XG_p, best_XG_p = ChooseBestCuts(C, cont*0, getfromCPLEX_Obj=LPS, 
+                        cutType = "X",
+                        Nrounds = NumRounds - useBestnonGMI,    # -1 because the best parameters from X will also be used here
+                        withGMI = True,             # Differene between X and XG is by controlling this
+                        cutDetails={'nRows':row_ct, 'nCuts':nCuts, 'nBad':1}, 
+                        return_bestcut_param=True, verbose = verbose - 1, scratch = scratch)
+            names.append('C_XG_p_'+str(row_ct))
+            # Generating an XG cuts with the best parameter of X
+            if useBestnonGMI:
+                _, C2_XG_p = addUserCut(C, cont*0, LPS, "X", 
+                                    cutDetails={'ans':best_X_p}, scratch = scratch
+                                    )
+                C2_XG_p.solve()
+                values.append(np.maximum(
+                        C2_XG_p.solution.get_objective_value(),
+                        C_XG_p.solution.get_objective_value()
+                    ))
+            else:
+                values.append( C_XG_p.solution.get_objective_value())
+            if verbose > 0:
+                print(str(row_ct)+" row X cuts generated for pure")        
+            # Mixed integer
+            # X cut
+            C_X_m, best_X_m = ChooseBestCuts(C, cont, getfromCPLEX_Obj=LPS, 
+                        cutType = "X",
+                        Nrounds = NumRounds, 
+                        cutDetails={'nRows':row_ct, 'nCuts':nCuts, 'nBad':1}, 
+                        return_bestcut_param=True, verbose = verbose - 1, scratch = scratch)
+            names.append('C_X_m_'+str(row_ct))
+            values.append(C_X_m.solution.get_objective_value())
+            # Add XG cuts
+            C_XG_m, best_XG_m = ChooseBestCuts(C, cont, getfromCPLEX_Obj=LPS, 
+                        cutType = "X",
+                        Nrounds = NumRounds - useBestnonGMI,    # -1 because the best parameters from X will also be used here
+                        withGMI = True,             # Differene between X and XG is by controlling this
+                        cutDetails={'nRows':row_ct, 'nCuts':nCuts, 'nBad':1}, 
+                        return_bestcut_param=True, verbose = verbose - 1, scratch = scratch)
+            names.append('C_XG_m_'+str(row_ct))
+            if useBestnonGMI:
+                # Generating an XG cuts with the best parameter of X
+                _, C2_XG_m = addUserCut(C, cont, LPS, "X", 
+                                    cutDetails={'ans':best_X_m}, scratch = scratch
+                                    )
+                C2_XG_m.solve()
+                values.append(np.maximum(
+                        C2_XG_m.solution.get_objective_value(),
+                        C_XG_m.solution.get_objective_value()
+                    ))
+            else:
+                values.append(C2_XG_m.solution.get_objective_value(), C_XG_m.solution.get_objective_value())
+            if verbose > 0:
+                print(str(row_ct)+" row X cuts generated for mixed")        
+        if doGX:
+            ############################################
+            ########## GENERALIZED X-POLYTOPE ##########
+            ############################################
+            # Pure integer
+            # Add GX cuts  
+            C_GX_p, best_GX_p = ChooseBestCuts(C, cont*0, getfromCPLEX_Obj=LPS, 
+                        cutType = "GX",
+                        Nrounds = NumRounds, 
+                        cutDetails={'nRows':row_ct, 'nCuts':nCuts, 'nBad':1}, 
+                        return_bestcut_param=True, verbose = verbose - 1, scratch = scratch)
+            names.append('C_GX_p_'+str(row_ct))
+            values.append(C_GX_p.solution.get_objective_value())
+            # Add GXG cuts
+            C_GXG_p, best_GXG_p = ChooseBestCuts(C, cont*0, getfromCPLEX_Obj=LPS, 
+                        cutType = "GX",
+                        Nrounds = NumRounds - useBestnonGMI,    # -1 because the best parameters from X will also be used here
+                        withGMI = True,             # Differene between X and XG is by controlling this
+                        cutDetails={'nRows':row_ct, 'nCuts':nCuts, 'nBad':1}, 
+                        return_bestcut_param=True, verbose = verbose - 1, scratch = scratch)
+            names.append('C_GXG_p_'+str(row_ct))
+            if useBestnonGMI:
+                # Generating an XG cuts with the best parameter of X
+                _, C2_GXG_p = addUserCut(C, cont*0, LPS, "GX", 
+                                    cutDetails={'ans':best_GX_p}, scratch = scratch
+                                    )
+                C2_GXG_p.solve()
+                values.append(np.maximum(
+                        C2_GXG_p.solution.get_objective_value(),
+                        C_GXG_p.solution.get_objective_value()
+                    ))
+            else:
+                values.append(C_GXG_p.solution.get_objective_value())
+            if verbose > 0:
+                print(str(row_ct)+" row GX cuts generated for pure")        
+            # Mixed integer
+            # GX cut
+            C_GX_m, best_GX_m = ChooseBestCuts(C, cont, getfromCPLEX_Obj=LPS, 
+                        cutType = "GX",
+                        Nrounds = NumRounds, 
+                        cutDetails={'nRows':row_ct, 'nCuts':nCuts, 'nBad':1}, 
+                        return_bestcut_param=True, verbose = verbose - 1, scratch = scratch)
+            names.append('C_GX_m_'+str(row_ct))
+            values.append(C_GX_m.solution.get_objective_value())
+            # Add GXG cuts
+            C_GXG_m, best_GXG_m = ChooseBestCuts(C, cont, getfromCPLEX_Obj=LPS, 
+                        cutType = "GX",
+                        Nrounds = NumRounds - useBestnonGMI,    # -1 because the best parameters from X will also be used here
+                        withGMI = True,             # Differene between X and XG is by controlling this
+                        cutDetails={'nRows':row_ct, 'nCuts':nCuts, 'nBad':1}, 
+                        return_bestcut_param=True, verbose = verbose - 1, scratch = scratch)
+            names.append('C_GXG_m_'+str(row_ct))
+            if useBestnonGMI:
+                # Generating an GXG cuts with the best parameter of GX
+                _, C2_GXG_m = addUserCut(C, cont, LPS, "GX", 
+                                    cutDetails={'ans':best_GX_m}, scratch = scratch
+                                    )
+                C2_GXG_m.solve()
+                values.append(np.maximum(
+                        C2_GXG_m.solution.get_objective_value(),
+                        C_GXG_m.solution.get_objective_value()
+                    ))
+            else:
+                values.append(C_GXG_m.solution.get_objective_value())
+            if verbose > 0:
+                print(str(row_ct)+" row GX cuts generated for mixed")        
     return names, values
 
 
