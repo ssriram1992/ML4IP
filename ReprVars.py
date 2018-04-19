@@ -105,6 +105,8 @@ class MIP:
                                     'totalPresolveTime', 'totalProbingTime', 'cliqueTable',
                                     'numCuts' (of each type),
                                     'numCutsTotal', 'numIter', 'numNodesProc'}
+    MIP.geometricFeatures()
+        Returns a dictionary with 
     """
     def __init__(self, form = 0, data = dict(),filenames = False, delimiter = ','):
         """
@@ -303,7 +305,7 @@ class MIP:
                                             objective = True,
                                             tableaux = False,
                                             basic = False,
-                                            TablNB = False,
+                                            TablNB = True, # Needed for geometric features
                                             precission = 13
                                         )
             self.LPSolved = True
@@ -329,6 +331,7 @@ class MIP:
         feature.update(self.CVStats()) # Stats of abs non zero entries each row
         feature.update(self.AOverb()) # Min/Max for ratios of constraint coeffs
         feature.update(self.OnetoAllA()) # Min/max for one-to-all coeff ratios
+        feature.update(self.geometricFeatures()) # Geometry of the columns of Aeq
         if returnAsVect:
             K = list(feature.keys())
             K.sort()
@@ -689,6 +692,43 @@ class MIP:
         else:
             D = self.Probingdict
         return D
+    # Geometric features
+    def geometricFeatures(self):
+        Aeq = self.Aeq
+        # We are interested in taking the scalar product of every column of Aeq with every column of Aeq.
+        # This is precisely obtained by (Aeq^T)(Aeq)
+        G = {}
+        (m, n) = Aeq.shape
+        nrm = np.linalg.norm(Aeq,axis=0)
+        G['nrm_mean_Aeq'] = np.mean(nrm)
+        G['nrm_sd_Aeq'] = np.std(nrm)
+        G['nrm_coeffvar_Aeq'] = G['nrm_sd_Aeq']/G['nrm_mean_Aeq']
+        A_norm = Aeq/nrm
+        A_dot = A_norm.T.dot(A_norm)
+        tole = 1e-9
+        mask = (np.tril(np.ones(n, n)) - np.identity(n)) > tol
+        scalar_vec = np.extract(arr = A_dot, condition = mask) # vector of scalar products 
+        G['scalar_mean_Aeq'] = np.mean(scalar_vec)
+        G['scalar_sd_Aeq'] = np.std(scalar_vec)
+        G['scalar_var_Aeq'] = np.var(scalar_vec)
+        G['scalar_coeffvar_Aeq'] = G['scalar_sd_Aeq']/G['scalar_mean_Aeq']
+        # Getting the same for Nonbasic tableaux
+        self.LPSolve()
+        Aeq = self.LPInfo["Tableaux_NB"].todense()
+        (m, n) = Aeq.shape
+        nrm = np.linalg.norm(Aeq,axis=0)
+        G['nrm_mean_NB'] = np.mean(nrm)
+        G['nrm_sd_NB'] = np.std(nrm)
+        G['nrm_coeffvar_NB'] = G['nrm_sd_NB']/G['nrm_mean_NB']
+        A_norm = Aeq/nrm
+        A_dot = A_norm.T.dot(A_norm)
+        mask = (np.tril(np.ones(n, n)) - np.identity(n)) > tol
+        scalar_vec = np.extract(arr = A_dot, condition = mask) # vector of scalar products 
+        G['scalar_mean_NB'] = np.mean(scalar_vec)
+        G['scalar_sd_NB'] = np.std(scalar_vec)
+        G['scalar_var_NB'] = np.var(scalar_vec)
+        G['scalar_coeffvar_NB'] = G['scalar_sd_NB']/G['scalar_mean_NB']
+        return G
     # End of feature extraction
     #######################
 
