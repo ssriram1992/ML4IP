@@ -30,9 +30,9 @@ for name in names:
     v_MIP.append(LP) # LP relaxed solution
     GMI = Sol_value[2]
     v_MIP.append((GMI-LP)/abs(LP)) # Improvement after adding all GMI
-    BestObj = max(Sol_value[5], Sol_value[6],Sol_value[9],Sol_value[10],
-                Sol_value[13], Sol_value[14], Sol_value[17], Sol_value[18],
-                Sol_value[21], Sol_value[22], Sol_value[25], Sol_value[26])
+    BestObj = max(Sol_value[5], Sol_value[6],Sol_value[9],Sol_value[10], #2row X, 2row XG, 2row GX, 2row GXG
+                Sol_value[13], Sol_value[14], Sol_value[17], Sol_value[18], # 5row X, 5row XG, 5row GX, 5row GXG
+                Sol_value[21], Sol_value[22], Sol_value[25], Sol_value[26]) # 10row X, 10row XG, 10row GX, 10row GXG
     v_MIP.append((BestObj - GMI)/(GMI - LP)) # Beta as defined in Basu and Sankaranarayanan (2018)
     v_MIP = np.array(v_MIP)
     # Problem data analysis

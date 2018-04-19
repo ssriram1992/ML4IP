@@ -328,10 +328,11 @@ def ChooseBestCuts(  M,
             Mod.set_warning_stream(None)
         Mod.solve()
         O = Mod.solution.get_objective_value()
-        if O > bestObj:
+        if O > bestObj or i==0:
             bestObj = O
             bestMod = Mod
             best_params = ans
+    print(bestObj)
     if return_bestcut_param:
         return bestMod, best_params
     else:
