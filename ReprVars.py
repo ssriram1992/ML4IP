@@ -510,6 +510,9 @@ class MIP:
         considered: positive (negative) coefficient to sum of positive (negative)
         coefficients
         """
+        Aeq = self.Aeq
+        n = self.Aeq.shape[1]
+        m = self.Aeq.shape[0]
         List1 = [] #pospos
         List2 = [] #posneg
         List3 = [] #negneg
@@ -711,6 +714,11 @@ class MIP:
         G['scalar_sd_Aeq'] = np.std(scalar_vec)
         G['scalar_var_Aeq'] = np.var(scalar_vec)
         G['scalar_coeffvar_Aeq'] = G['scalar_sd_Aeq']/G['scalar_mean_Aeq']
+        angle_vec = np.arccos(scalar_vec)
+        G['angle_mean_Aeq'] = np.mean(angle_vec)
+        G['angle_sd_Aeq'] = np.std(angle_vec)
+        G['angle_var_Aeq'] = np.var(angle_vec)
+        G['angle_coeffvar_Aeq'] = G['angle_sd_Aeq']/G['angle_mean_Aeq']
         # Getting the same for Nonbasic tableaux
         self.LPSolve()
         Aeq = self.LPInfo["Tableaux_NB"].todense()
@@ -727,6 +735,11 @@ class MIP:
         G['scalar_sd_NB'] = np.std(scalar_vec)
         G['scalar_var_NB'] = np.var(scalar_vec)
         G['scalar_coeffvar_NB'] = G['scalar_sd_NB']/G['scalar_mean_NB']
+        angle_vec = np.arccos(scalar_vec)
+        G['angle_mean_NB'] = np.mean(angle_vec)
+        G['angle_sd_NB'] = np.std(angle_vec)
+        G['angle_var_NB'] = np.var(angle_vec)
+        G['angle_coeffvar_NB'] = G['angle_sd_NB']/G['angle_mean_NB']
         return G
     # End of feature extraction
     #######################
